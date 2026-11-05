@@ -127,20 +127,9 @@ uvicorn app.main:app --host 127.0.0.1 --port 8000
 
 打开 <http://127.0.0.1:8000> → 点角色下方的电话按钮 → 允许麦克风 → 说话。
 
-本机已按生产模式启动在 <http://127.0.0.1:8000>，并且装了**两层自启**：
+想让服务常驻，有两种方式，选一种即可：
 
-**第一层（已生效）**：`~/.zshrc` 里有一个标记块，打开任意终端就会调
-`scripts/autostart.sh` 做健康检查，没在跑就顺手拉起来。所以电脑重启后，
-开个终端窗口就好，不用记任何命令。
-
-```bash
-./scripts/autostart.sh            # 确保在跑（会等就绪并打印 pid）
-./scripts/autostart.sh --status   # 只看状态：0=运行中 1=未运行
-./scripts/autostart.sh --stop     # 停止（下次开终端会再被拉起）
-```
-
-**第二层（可选，更稳）**：如果你想登录即启动、崩溃由系统拉起、完全不用开终端，
-在自己的终端注册一次 LaunchAgent（plist 已生成、`plutil -lint` 通过）：
+**方式一：LaunchAgent（推荐，仅 macOS）** —— 登录即启动、崩溃由系统拉起，完全不用开终端：
 
 ```bash
 ./scripts/install_macos_launchd.sh install     # 注册 LaunchAgent（只需一次）
@@ -150,9 +139,28 @@ uvicorn app.main:app --host 127.0.0.1 --port 8000
 tail -f logs/moss-live.log                     # 看日志
 ```
 
-> 说明：部署时的受限会话里 `launchctl bootstrap` 被系统拒绝（`5: Input/output error`），
-> 所以这一层需要你在自己的终端里执行一次。两层可以共存，不会重复启动。
-> 详见 [docs/DEPLOY.md §11](docs/DEPLOY.md#11-本机部署现状已执行)。
+**方式二：终端钩子** —— 适合 `launchctl bootstrap` 被系统拒绝（`5: Input/output error`）
+的受限环境。`scripts/autostart.sh` 是幂等的，已在运行则立即返回；在 `~/.zshrc` 末尾
+追加下面这个标记块，打开任意终端时顺手拉起：
+
+```zsh
+# >>> MOSS Live autostart >>>
+if [ -x /Users/xxx/moss-live/scripts/autostart.sh ]; then
+  /Users/xxx/moss-live/scripts/autostart.sh --quiet >/dev/null 2>&1 &!
+fi
+# <<< MOSS Live autostart <<<
+```
+
+```bash
+./scripts/autostart.sh            # 确保在跑（会等就绪并打印 pid）
+./scripts/autostart.sh --status   # 只看状态：0=运行中 1=未运行
+./scripts/autostart.sh --stop     # 停止（下次开终端会再被拉起）
+```
+
+> ⚠️ 方式二的钩子里是**绝对路径**，必须替换成你的真实目录；之后改名、移动项目或换用户名
+> 都要同步修改，否则钩子会静默失败（不报错也不启动）。两种方式可以共存（`autostart.sh`
+> 幂等，检测到在跑就直接返回），但只装一种就够。详见
+> [docs/DEPLOY.md §11](docs/DEPLOY.md#11-本机部署现状参考示例)。
 
 ### 4.1 换一台设备安装
 
@@ -331,7 +339,7 @@ moss-live/
 ```bash
 source .venv/bin/activate
 
-pytest tests -q                                  # 44 项单元/接口/中继/播放仿真测试
+pytest -q                                        # 44 项单元/接口/中继/播放仿真测试（pytest.ini 已限定只收集 tests/）
 python scripts/e2e_live.py                       # 真实 API 全链路（经中继）
 APP_TEST_ASSETS=1 uvicorn app.main:app --port 8000 &
 python scripts/browser_test.py                   # 18 项浏览器端到端检查
