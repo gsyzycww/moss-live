@@ -125,15 +125,26 @@ app.js（控制器）
 
 ### 4.1 状态机
 
+```mermaid
+stateDiagram-v2
+    [*] --> idle
+    idle --> connecting: 点击电话
+    connecting --> attached: session_attached
+    attached --> ready: session.update 发出并收到 session.updated
+    ready --> live: mic_state 开启
+    connecting --> failed: error / 握手超时（10 s）
+    ready --> failed: session.updated.error 非空
+    live --> ready: response.ended
+    idle --> closed: endCall()
+    connecting --> closed: endCall()
+    attached --> closed: endCall()
+    ready --> closed: endCall()
+    live --> closed: endCall()
+    failed --> closed: endCall() / close()
+    closed --> [*]
 ```
-idle ──click──► connecting ──session_attached──► attached
-                    │                              │ session.update
-                    │                              ▼
-                    └──error/timeout──► failed ◄── ready ──mic_state──► live
-                                                     ▲                   │
-                                                     └── response.ended ─┘
-任意状态 ──endCall()/close()──► closed
-```
+
+状态常量定义在 `session.js` 的 `SessionState`（`idle / connecting / attached / ready / live / failed / closed`）。
 
 `app.js` 里的通话对象（`state.call`）持有：`session / mic / video / transcript /
 timerId / raf / statusKey / muted / camOn / screenOn / focus`。
@@ -237,26 +248,51 @@ screen: getDisplayMedia()               → <video> → canvas(长边 1024) → 
 
 ## 5. 时序：一次带打断的通话
 
-```
-浏览器                   中继                    上游
-  │ attach_session  ──────►│ ─────────────────────►│
-  │◄──── session_attached ─│◄─────────────────────│
-  │ session.update  ──────►│ (清洗字段) ──────────►│
-  │◄──── session.updated ──│◄─────────────────────│
-  │ media.mode / mic_state►│ ─────────────────────►│
-  │ 0x00 PCM 20ms × N ────►│ ─────────────────────►│
-  │                        │◄── input.speech.*  ──│
-  │◄── input.transcript.* ─│                      │
-  │                        │◄── response.audio.started
-  │◄── audio.context ──────│                      │
-  │◄── 48k PCM ────────────│                      │
-  │  playback.chunk.completed ────────────────────►│
-  │ （用户抢话）            │◄── response.audio.stop (barge-in)
-  │  playback.stopped{played_ms}
-  │◄── response.interrupted│                      │
-  │                        │◄── response.audio.started（新一轮）
-  │ ...                    │                      │
-  │◄── response.ended{completed}
+```mermaid
+sequenceDiagram
+    participant B as 浏览器
+    participant R as 本地中继
+    participant U as 上游 moss-live-1.0
+
+    B->>R: attach_session
+    R->>U: attach_session（服务端注入 Authorization）
+    U-->>R: session_attached
+    R-->>B: session_attached
+    B->>R: session.update
+    R->>U: session.update（字段清洗后）
+    U-->>R: session.updated（error 为空）
+    R-->>B: session.updated
+    B->>R: media.mode / mic_state
+    R->>U: 转发
+
+    loop 通话期间持续上行
+        B->>R: 0x00 + PCM 16k（20 ms/帧）
+        R->>U: 转发
+    end
+
+    U-->>R: input.speech.* / input.transcript.*
+    R-->>B: 同上
+    U-->>R: response.audio.started
+    R-->>B: response.audio.started
+
+    loop 每个音频块
+        U-->>R: response.audio.context
+        U-->>R: 48 kHz PCM（标签外的裸帧）
+        R-->>B: 同上
+        B->>R: playback.chunk.completed
+        R->>U: 转发
+    end
+
+    Note over B,U: 用户抢话
+    U-->>R: response.audio.stop（reason=barge-in）
+    R-->>B: 同上
+    B->>R: playback.stopped（played_audio_ms）
+    R->>U: 转发
+    U-->>R: response.interrupted
+    R-->>B: 同上
+
+    U-->>R: response.ended（status=completed）
+    R-->>B: 同上
 ```
 
 ---
@@ -308,7 +344,7 @@ screen: getDisplayMedia()               → <video> → canvas(长边 1024) → 
 3. 所有网络/媒体失败都要 `toast()` 给用户看，并在 `console` 留可判定信息。
 4. 服务端任何新指令：先加进 `ALLOWED_CLIENT_ACTIONS`，再写 `validate_client_event`
    分支，最后补一条 pytest。
-5. 不要在 `finally` 里 `await` 之前之外写清理逻辑以外的副作用。
+5. 中继的清理逻辑要写在 `finally` 的第一个 `await` 之前，否则任务被取消时会被跳过。
 
 ---
 

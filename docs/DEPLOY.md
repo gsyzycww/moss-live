@@ -1,7 +1,7 @@
 # 部署手册
 
-覆盖四种部署形态：本机前台、macOS LaunchAgent（本项目默认）、Linux systemd、
-Docker；以及对外暴露时的 Nginx/TLS 配置、安全清单、升级回滚与排障。
+覆盖五种部署形态：本机前台、macOS LaunchAgent、Linux systemd、Docker，
+以及对外暴露时的 Nginx/TLS 反代；另附安全清单、升级回滚与排障。
 
 > 部署前务必确认：`MOSS_API_KEY` 有效且有 MOSS-Live 权限；服务器能访问
 > `api.mosi.cn:443`（WSS）。用 `curl -I https://api.mosi.cn/v1/models` 快速验证网络。
@@ -118,9 +118,11 @@ RELOAD=1 ./scripts/run.sh     # 热重载
 
 ---
 
-## 3. 方式 B：macOS LaunchAgent（本项目当前采用）
+## 3. 方式 B：macOS LaunchAgent
 
-已在本机安装为 `com.moss.live`，登录后自动启动，异常退出 3 秒内自动重启。
+注册后登录即自动启动；进程异常退出时由 launchd 重启，按系统默认 `ThrottleInterval`
+（10 秒）节流，脚本未覆盖该值。安装脚本会把执行时的绝对路径写入 plist，
+**装完不要再移动项目目录**（详见文首「安装路径务必先想清楚」）。
 
 ```bash
 # 安装（幂等，可重复执行）
@@ -321,31 +323,38 @@ python scripts/e2e_live.py
 
 ---
 
-## 11. 本机部署现状（参考示例）
+## 11. 自启方案与常见坑
 
-> 下表是某台机器上的实际部署记录，**路径均为占位符**，安装时替换成你自己的目录。
-> 把它当作"装好之后应该长什么样"的对照，而不是可以直接复制的命令。
+三种层次，按需求选一个：
+
+| 方式 | 适合场景 | 命令 |
+| --- | --- | --- |
+| 前台运行 | 只想试一下，关终端就停 | `./scripts/run.sh` |
+| LaunchAgent | 登录即启动、崩溃自动重启（macOS 推荐） | `./scripts/install_macos_launchd.sh install` |
+| 终端钩子 | `launchctl bootstrap` 被拒（`5: Input/output error`）时的替代方案 | `./scripts/autostart.sh` + `~/.zshrc` 标记块 |
+
+> 三种都**不会**在安装时自动启用。`install.sh` 只管运行环境，自启必须显式开启。
+
+装好之后的标准状态（对照用）：
 
 | 项目 | 值 |
 | --- | --- |
 | 代码目录 | `/Users/xxx/moss-live` |
-| 虚拟环境 | `/Users/xxx/moss-live/.venv`（Python 3.13.12） |
+| 虚拟环境 | `/Users/xxx/moss-live/.venv` |
 | 监听 | `http://127.0.0.1:8000` |
-| 运行模式 | 生产模式：`APP_TEST_ASSETS=false`（`/test-assets` 返回 404） |
 | 主进程 | `uvicorn app.main:app --host 127.0.0.1 --port 8000` |
-| 日志 | `logs/moss-live.log`（自愈脚本与 LaunchAgent 共用） |
-| 访问方式 | 浏览器打开 <http://127.0.0.1:8000> |
-| 自启方式 | 已装两层：① 终端启动钩子（已生效）② LaunchAgent（plist 已就绪，需你手动注册一次） |
+| 日志 | `logs/moss-live.log`（`autostart.sh` 与 LaunchAgent 共用） |
 
-### 11.1 已生效的自启方式：终端启动钩子
+### 11.1 终端钩子方案（无 launchd 权限时）
 
-部署环境里 `launchctl bootstrap` 被系统拒绝（`5: Input/output error`），
-因此改用一条不依赖该权限的方案，**已经装好并实测通过**：
+适用场景：受限会话、CI 容器，或 `launchctl bootstrap` 一律返回
+`5: Input/output error` 的机器。
 
-- 新增脚本 `scripts/autostart.sh`：幂等，已在运行则 3ms 内直接返回；
-  没运行就 `nohup` 拉起 uvicorn，日志追加到 `logs/moss-live.log`。
-- `~/.zshrc` 末尾追加了一个标记块，每次打开终端时后台调用它（`&!` 脱离作业控制，
-  不拖慢终端、不打印任何东西）：
+`scripts/autostart.sh` 本身幂等：已在运行则 3 ms 内直接返回，不会起第二个进程。
+在 `~/.zshrc` 末尾追加一个标记块，每次打开终端时后台调用它（`&!` 脱离作业控制，
+不拖慢终端、不打印任何东西）：
+
+- 检测到没有服务在跑时，用 `nohup` 拉起 uvicorn，日志追加到 `logs/moss-live.log`。
 
 ```zsh
 # >>> MOSS Live autostart >>>
@@ -379,10 +388,10 @@ cd /Users/xxx/moss-live
 - 变量后紧跟中文或全角符号时必须写 `${PORT}` 而不是 `$PORT`。某些 locale 下
   bash 会把全角字节并进变量名，报 `PORT?: unbound variable`。
 
-### 11.2 更稳的一层：LaunchAgent（需你手动执行一次）
+### 11.2 LaunchAgent 方案
 
-终端钩子依赖"你打开终端"这个动作。如果你希望**登录即启动、崩溃自动重启、
-完全不需要开终端**，把 LaunchAgent 注册上（plist 已生成，`plutil -lint` 通过）：
+终端钩子依赖"你打开终端"这个动作。如果希望**登录即启动、崩溃自动重启、
+完全不需要开终端**，注册 LaunchAgent（plist 由脚本现场生成，路径取执行时的真实目录）：
 
 ```bash
 cd /Users/xxx/moss-live
@@ -426,6 +435,8 @@ cd /Users/xxx/moss-live && ./scripts/run.sh
 
 ### 12.1 在旧机器打包
 
+在项目的**父目录**下执行（下面假设项目目录就叫 `moss-live`）：
+
 ```bash
 cd /Users/xxx
 tar --exclude='moss-live/.venv' \
@@ -440,14 +451,14 @@ ls -lh moss-live.tar.gz     # 约 1 MB
 
 - **带走**（默认已在包里）：到新机器直接能跑。但里面是能花钱的 API Key，
   传输请走 AirDrop / `scp` / U 盘，别丢公共网盘或邮箱。
-- **不带走**（`--exclude='moss/.env'`）：新机器上 `install.sh` 会从 `.env.example`
+- **不带走**（`--exclude='moss-live/.env'`）：新机器上 `install.sh` 会从 `.env.example`
   生成一份空的，你手动填 key 即可。换设备/换人时更推荐这样。
 
 ### 12.2 在新机器安装
 
 ```bash
 tar -xzf moss-live.tar.gz
-cd moss
+cd moss-live
 ./scripts/install.sh              # 装依赖 + 生成 .env + 自检
 ./scripts/install.sh --start      # 装完直接前台启动
 ```

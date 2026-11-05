@@ -62,17 +62,17 @@ Esc 双击结束通话、移动端布局、服务端令牌桶式限额、运行�
 ## 2. 架构
 
 ```
-┌──────────────┐   ws://127.0.0.1:8000/ws/realtime    ┌──────────────────┐
-│   浏览器      │  ─────────────────────────────────►  │  FastAPI 中继     │
-│  · AudioWorklet 采集 48k → 16k PCM                  │  · 注入 Bearer    │
-│  · WebAudio 48k 分块播放 + 回执                      │  · 白名单校验     │
-│  · 摄像头/屏幕 → JPEG                                │  · session 字段清洗│
-│  · 字幕 / 记录 / 调试面板                             │  · 帧大小/时长上限 │
-└──────────────┘  ◄─────────────────────────────────  └────────┬─────────┘
-                        事件 + 48k PCM                          │ wss
-                                                                ▼
-                                                   api.mosi.cn/v1/realtime
-                                                        moss-live-1.0
+┌─────────────────────────────────────┐                                     ┌───────────────────────┐
+│  浏览器                             │  ws://127.0.0.1:8000/ws/realtime    │  FastAPI 中继         │
+│  · AudioWorklet 采集 48k → 16k PCM  │  ──────────►                        │  · 注入 Bearer        │
+│  · WebAudio 48k 分块播放 + 回执     │  ──────────►                        │  · 指令白名单校验     │
+│  · 摄像头 / 屏幕 → JPEG             │  ──────────►                        │  · session 字段清洗   │
+│  · 字幕 / 记录 / 调试面板           │  ◄──────────                        │  · 帧大小 / 时长上限  │
+└─────────────────────────────────────┘                                     └───────────────────────┘
+                                                                                        │ wss
+                                                                                        ▼
+                                                                             api.mosi.cn/v1/realtime
+                                                                                  moss-live-1.0
 ```
 
 为什么要中继：
@@ -91,7 +91,7 @@ Esc 双击结束通话、移动端布局、服务端令牌桶式限额、运行�
 | 浏览器       | Chrome / Edge 100+、Safari 16+（需支持 AudioWorklet）                                   |
 | 网络         | 可访问 `api.mosi.cn`（WSS）                                                             |
 | MOSS API Key | 在 [API Key 管理平台](https://platform.moss.cn/app/api-keys/) 创建，需有 MOSS-Live 权限 |
-| 系统         | macOS / Linux / Windows（本项目本机部署在 macOS）                                       |
+| 系统         | macOS / Linux 已验证；Windows 需 WSL2 或 Docker（未做原生验证）                         |
 
 麦克风/摄像头只在 **HTTPS 或 localhost** 下可用；局域网访问请按
 [deploy/nginx.conf.example](deploy/nginx.conf.example) 配置 TLS。
@@ -107,13 +107,33 @@ Esc 双击结束通话、移动端布局、服务端令牌桶式限额、运行�
 > 要移动目录，请先卸载自启（`./scripts/install_macos_launchd.sh uninstall`），移动后重新安装。
 > 路径里不要带空格和中文。详见 [docs/DEPLOY.md](docs/DEPLOY.md)。
 
-一步到位（推荐）：
+新手按下面三步走（推荐）：
+
+**第 1 步：拿到代码**
 
 ```bash
-cd /Users/xxx/moss-live # 跳转到moss-live目录
+git clone https://github.com/gsyzycww/moss-live.git
+cd moss-live
+```
+
+没装 git 就到仓库页点 `Code → Download ZIP`，解压后 `cd moss-live`。
+
+**第 2 步：准备 API Key**
+
+到 [API Key 管理平台](https://platform.moss.cn/app/api-keys/) 创建一个，确认账号有
+MOSS-Live 权限。密钥只在服务端使用，不会进浏览器。计费按连接在线时长。
+
+**第 3 步：安装并启动**
+
+```bash
+cd /Users/xxx/moss-live # 换成你刚才 clone 下来的路径
 ./scripts/install.sh          # 建 venv、装依赖、生成 .env、自检
 ./scripts/install.sh --start  # 装完直接前台启动
 ```
+
+> 第 3 步会生成 `.env` 但**不会替你填密钥**——装完编辑 `.env` 把
+> `MOSS_API_KEY=` 后面补上真实值，再启动。不填也能打开页面，只是右上角会显示
+> 「缺少密钥」，点电话会连不上。
 
 > `install.sh` 只准备运行环境（venv / 依赖 / `.env` / 自检），**不会注册开机自启**，
 > 也不会改动你的 shell 配置。想开机自启要显式执行
@@ -142,8 +162,10 @@ uvicorn app.main:app --host 127.0.0.1 --port 8000
 > [docs/DEPLOY.md 第 12 节](docs/DEPLOY.md#12-换一台设备安装迁移)。
 
 打开 <http://127.0.0.1:8000> → 点角色下方的电话按钮 → 允许麦克风 → 说话。
+右上角状态灯应为「服务正常」；显示「缺少密钥」说明 `.env` 里的 Key 没填或没重启。
 
-想让服务常驻，有两种方式，选一种即可：
+**到这里已经能用了。** 下面这一段是可选内容：只有希望服务在关掉终端后继续跑、
+或开机自动起来时才需要看，两种方式选一种即可。
 
 **方式一：LaunchAgent（推荐，仅 macOS）** —— 登录即启动、崩溃由系统拉起，完全不用开终端：
 
@@ -176,7 +198,7 @@ fi
 > ⚠️ 方式二的钩子里是**绝对路径**，必须替换成你的真实目录；之后改名、移动项目或换用户名
 > 都要同步修改，否则钩子会静默失败（不报错也不启动）。两种方式可以共存（`autostart.sh`
 > 幂等，检测到在跑就直接返回），但只装一种就够。详见
-> [docs/DEPLOY.md §11](docs/DEPLOY.md#11-本机部署现状参考示例)。
+> [docs/DEPLOY.md §11](docs/DEPLOY.md#11-自启方案与常见坑)。
 
 ### 4.1 换一台设备安装
 
@@ -187,6 +209,8 @@ fi
 macOS / Linux 已验证；Windows 请用 WSL2 或 Docker。
 
 **第一步：旧机器打包**
+
+在项目的**父目录**下执行（下面假设项目目录就叫 `moss-live`，不一致时改成你自己的目录名）：
 
 ```bash
 cd /Users/xxx
@@ -214,30 +238,26 @@ cd moss-live
 
 **第三步：让它常驻**
 
-| 平台                     | 做法                                                            |
-| ------------------------ | --------------------------------------------------------------- |
-| macOS                    | `./scripts/install_macos_launchd.sh install`                    |
-| macOS（无 launchd 权限） | `./scripts/autostart.sh` + 把钩子加进 `~/.zshrc`（见 §11.1）    |
-| Linux                    | `deploy/moss-live.service` → `systemctl enable --now moss-live` |
-| 任意                     | `docker compose up -d --build`                                  |
+| 平台                     | 做法                                                              |
+| ------------------------ | ----------------------------------------------------------------- |
+| macOS                    | `./scripts/install_macos_launchd.sh install`                      |
+| macOS（无 launchd 权限） | `./scripts/autostart.sh` + 把钩子加进 `~/.zshrc`（见 [DEPLOY §11.1](docs/DEPLOY.md#111-终端钩子方案无-launchd-权限时)） |
+| Linux                    | `deploy/moss-live.service` → `systemctl enable --now moss-live`   |
+| 任意                     | `docker compose up -d --build`                                    |
 
 > 注意：`~/.zshrc` 的钩子里写的是本机绝对路径，换设备或换目录要同步改。
 
-**第四步：从手机 / 另一台电脑访问（三步缺一不可）**
+**第四步：从手机 / 另一台电脑访问（三件事缺一不可）**
 
-默认只监听 `127.0.0.1`，其他设备连不上。
+默认只监听 `127.0.0.1`，同网段的其他设备根本连不上。三步依次做完才生效：
 
-```bash
-# .env
-APP_HOST=0.0.0.0              # 1) 改监听地址
-APP_ACCESS_CODE=只有你知道的口令   # 3) 设访问口令
-```
+1. **改监听地址** —— `.env` 里设 `APP_HOST=0.0.0.0`。
+2. **必须上 HTTPS** —— 浏览器只在安全上下文里给麦克风，`localhost` 豁免。
+   `http://192.168.x.x:8000` 能看界面但拿不到麦克风。有域名可用 Caddy 自动签证书；
+   纯局域网用 `mkcert` 自签并装到设备信任列表；不想碰证书用 Tailscale / Cloudflare Tunnel。
+3. **设访问口令** —— `.env` 里设 `APP_ACCESS_CODE=只有你知道的口令`。
 
-2）**必须上 HTTPS**：浏览器只在安全上下文里给麦克风，`localhost` 豁免，
-`http://192.168.x.x:8000` 能看界面但拿不到麦克风。有域名用 Caddy 自动签证书；
-纯局域网用 `mkcert` 自签并装到设备信任列表；不想碰证书用 Tailscale / Cloudflare Tunnel。
-
-口令别省：暴露到 `0.0.0.0` 后，中继会替任何能连上它的人用你的 Key 建会话。
+口令别省：监听 `0.0.0.0` 之后，中继会替任何能连上它的人用你的 Key 建会话。
 
 反向代理配置见 `deploy/nginx.conf.example`（WebSocket 的 `Upgrade` 头不能漏），
 证书选型对比、更新流程、排障见 `docs/DEPLOY.md` 第 12 节。

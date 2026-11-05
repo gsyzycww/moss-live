@@ -7,9 +7,9 @@
 
 | 测试层 | 用例/断言数 | 结果 | 备注 |
 | --- | --- | --- | --- |
-| 单元测试（协议） | 20 | ✅ 全部通过 | 字段清洗、白名单、二进制帧 |
+| 单元测试（协议） | 22 | ✅ 全部通过 | 字段清洗、白名单、二进制帧 |
 | 接口测试（HTTP） | 9 | ✅ 全部通过 | health/config/personas/静态资源/问候音频 |
-| 中继测试（假上游） | 8 | ✅ 全部通过 | 鉴权注入、转发、回执、配额 |
+| 中继测试（假上游） | 6 | ✅ 全部通过 | 鉴权注入、转发、回执、配额 |
 | 播放队列仿真（Node） | 4 | ✅ 全部通过 | 1x/2x/8x 下发下排布不重叠、不压缩 |
 | 问候音频仿真（Node） | 3 | ✅ 全部通过 | 按时延迟起播、不占用队列、可被打断 |
 | 真实 API 端到端 | 9 | ✅ 全部通过 | 经中继完成一次真实语音问答 |
@@ -17,7 +17,7 @@
 | **合计** | **71** | **✅ 0 失败** | `pytest` 44 项 + 脚本 27 项断言 |
 
 ```
-$ pytest tests -q
+$ pytest -q
 44 passed, 1 warning in 1.61s
 
 $ python scripts/e2e_live.py
@@ -47,7 +47,7 @@ $ python scripts/browser_test.py
 
 ## 3. 分层说明
 
-### 3.1 单元测试 `tests/test_protocol.py`（20 项）
+### 3.1 单元测试 `tests/test_protocol.py`（22 项）
 
 覆盖“上游会断线”的所有边界：
 
@@ -62,16 +62,16 @@ $ python scripts/browser_test.py
 **修复的真实 bug**：早期版本会把前端传来的 `voice_id` 原样转发，导致上游
 `invalid_public_request` 直接断线；现在被 `sanitize_session` 拦截。
 
-### 3.2 接口测试 `tests/test_api.py`（8 项）
+### 3.2 接口测试 `tests/test_api.py`（9 项）
 
 - `/api/health` 状态、模型、指标结构；**密钥只回显 `****后四位`**。
 - `/api/config` 中英文、角色顺序、场景数量、音频采样率、非法语言 422。
 - `/api/personas` 结构；`/` 首页含标题且 `Cache-Control: no-store`。
 - 5 个静态资源 200；OpenAPI 可访问。
 
-### 3.3 中继测试 `tests/test_relay.py`（8 项）
+### 3.3 中继测试 `tests/test_relay.py`（6 项）
 
-用本地 `websockets` 假上游（`FakeUpstream`）精确断言：
+用本地 `websockets` 假上游（`FakeUpstream`）断言下列行为（6 个用例覆盖）：
 
 1. 上游收到的 `Authorization: Bearer test-key-123456`（密钥注入正确）。
 2. 上游 URL 带 `model` 与 `user` 查询参数。
