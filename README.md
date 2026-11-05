@@ -6,11 +6,11 @@
 
 浏览器只连接本机的 FastAPI 中继，API Key 全程留在服务端。
 
-![落地页](artifacts/screenshots/01-landing.png)
+![落地页](docs/images/01-landing.jpg)
 
-| 通话界面                                   | 字幕记录                                         |
-| ------------------------------------------ | ------------------------------------------------ |
-| ![通话](artifacts/screenshots/02-call.png) | ![记录](artifacts/screenshots/04-transcript.png) |
+| 通话界面                             | 字幕记录                                       |
+| ------------------------------------ | ---------------------------------------------- |
+| ![通话](docs/images/02-call.jpg)     | ![记录](docs/images/04-transcript.jpg)          |
 
 ---
 
@@ -297,7 +297,8 @@ moss-live/
 ├── scripts/                 # install.sh、autostart.sh、run.sh、gen_greeting.py、E2E 脚本
 ├── deploy/                  # nginx、systemd 示例
 ├── docs/                    # 开发文档、接口文档、部署手册、测试报告
-└── artifacts/               # 测试截图与生成的回答音频
+│   └── images/              # README 引用的截图（JPEG，随仓库分发）
+└── artifacts/               # 运行产物：测试截图与回答音频（已被 .gitignore 忽略）
 ```
 
 ---
