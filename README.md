@@ -115,6 +115,10 @@ cd /Users/xxx/moss-live # 跳转到moss-live目录
 ./scripts/install.sh --start  # 装完直接前台启动
 ```
 
+> `install.sh` 只准备运行环境（venv / 依赖 / `.env` / 自检），**不会注册开机自启**，
+> 也不会改动你的 shell 配置。想开机自启要显式执行
+> `./scripts/install_macos_launchd.sh install`，见下文「方式一」。
+
 手工版（效果相同，便于理解每一步）：
 
 ```bash

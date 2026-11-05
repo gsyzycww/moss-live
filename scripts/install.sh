@@ -139,6 +139,8 @@ else
   echo "  开机自启     ./scripts/install_macos_launchd.sh install   # 仅 macOS"
   echo "  然后打开     http://127.0.0.1:${PORT}"
   echo
+  echo "以上都需你手动执行。安装器只准备运行环境，不会注册任何开机自启。"
+  echo
   echo "如果要从别的设备（手机/另一台电脑）访问，必须用 HTTPS，"
   echo "否则浏览器会禁止麦克风。见 docs/DEPLOY.md 第 12 节。"
 fi
