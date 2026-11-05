@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-lang="zh">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#07080a" />
+<title>MOSS Live · 全双工实时语音 Demo</title>
+<meta name="description" content="复刻 MOSS-Live 官方 Demo：全双工实时语音对话、语义打断、实时字幕与视觉理解。" />
+<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+<link rel="stylesheet" href="/static/css/app.css" />
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-phone" viewBox="0 0 24 24"><path d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.24 11.4 11.4 0 0 0 3.6.58 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.25.2 2.46.58 3.6a1 1 0 0 1-.25 1z" fill="currentColor"/></symbol>
+    <symbol id="i-hangup" viewBox="0 0 24 24"><path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .4-.23.75-.58.92A11.4 11.4 0 0 1 3 14.9V12c0-.55.3-1.05.75-1.3A16.9 16.9 0 0 1 12 8.5c3 0 5.8.72 8.25 2.1.46.26.75.76.75 1.3v2.9c0 .36-.23.68-.58.85a11.4 11.4 0 0 1-3.82.84 1 1 0 0 1-.58-.92v-3.1A15.6 15.6 0 0 0 12 9z" fill="currentColor"/></symbol>
+    <symbol id="i-mic" viewBox="0 0 24 24"><path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3zm5-3a1 1 0 1 1 2 0 7 7 0 0 1-6 6.93V20h2a1 1 0 1 1 0 2H9a1 1 0 1 1 0-2h2v-2.07A7 7 0 0 1 5 11a1 1 0 1 1 2 0 5 5 0 0 0 10 0z" fill="currentColor"/></symbol>
+    <symbol id="i-mic-off" viewBox="0 0 24 24"><path d="M3.7 2.3 21.7 20.3a1 1 0 0 1-1.4 1.4l-3.1-3.1A7 7 0 0 1 13 21.93V24h-2v-2.07A7 7 0 0 1 5 15a1 1 0 1 1 2 0 5 5 0 0 0 7.6 4.3l-1.5-1.5A3 3 0 0 1 9 15V9.4L2.3 3.7a1 1 0 0 1 1.4-1.4zM15 11.6 9.1 5.7V6a3 3 0 0 0 5.9.6zM12 2a4 4 0 0 1 4 4v4.3l-2-2V6a2 2 0 0 0-3.7-1l-1.5-1.5A4 4 0 0 1 12 2zm7 9a1 1 0 0 1 1 1 6.94 6.94 0 0 1-1.2 3.94l-1.44-1.44A4.94 4.94 0 0 0 18 12a1 1 0 0 1 1-1z" fill="currentColor"/></symbol>
+    <symbol id="i-camera" viewBox="0 0 24 24"><path d="M4 5h11a2 2 0 0 1 2 2v1.5l4.3-2.5A1 1 0 0 1 23 7v10a1 1 0 0 1-1.7.8L17 15.5V17a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zm13 4.6V7H4v10h11v-2.6l6 3.5V7.4l-4 2.2z" fill="currentColor"/></symbol>
+    <symbol id="i-screen" viewBox="0 0 24 24"><path d="M3 4h18a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-7v2h3a1 1 0 1 1 0 2H7a1 1 0 1 1 0-2h3v-2H3a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm0 2v10h18V6H3zm9 2.5 3.5 3-1.4 1.4-1.1-1V15h-2v-3.1l-1.1 1-1.4-1.4 3.5-3z" fill="currentColor"/></symbol>
+    <symbol id="i-caption" viewBox="0 0 24 24"><path d="M4 3h16a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H8l-4 3v-3H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm0 2v11h16V5H4zm3.5 3H12v1.8H9.5v2.4H12V14H8.5a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1zm6 0h4.5v1.8H15v2.4h2V13H13.5a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1z" fill="currentColor"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm0 2a2 2 0 1 1 0 4 2 2 0 0 1 0-4zm8.3 2c0 .4-.03.8-.08 1.2l2 1.5-2 3.4-2.3-.9c-.6.5-1.3.9-2 1.2l-.4 2.4h-4l-.4-2.4c-.7-.3-1.4-.7-2-1.2l-2.3.9-2-3.4 2-1.5a8 8 0 0 1 0-2.4l-2-1.5 2-3.4 2.3.9c.6-.5 1.3-.9 2-1.2L10.3 2h4l.4 2.4c.7.3 1.4.7 2 1.2l2.3-.9 2 3.4-2 1.5c.05.4.08.8.08 1.2z" fill="currentColor"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="m6.4 5 5.6 5.6L17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4z" fill="currentColor"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24"><path d="M3 3l18 9-18 9 4-9-4-9zm5.5 8-2.2 4.9L17 12 6.3 7.1 8.5 12H13v1H8.5z" fill="currentColor"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M11 3h2v9.2l3.3-3.3 1.4 1.4-5.7 5.7-5.7-5.7 1.4-1.4L11 12.2V3zM4 18h16v2H4z" fill="currentColor"/></symbol>
+    <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 2 4.5 13.5H11L10 22l8.5-11.5H12L13 2z" fill="currentColor"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M12 5c5 0 9 4 10 7-1 3-5 7-10 7S3 15 2 12c1-3 5-7 10-7zm0 2c-3.6 0-6.9 2.8-7.8 5 .9 2.2 4.2 5 7.8 5s6.9-2.8 7.8-5C18.9 9.8 15.6 7 12 7zm0 1.5a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7z" fill="currentColor"/></symbol>
+    <symbol id="i-translate" viewBox="0 0 24 24"><path d="M4 4h8v2H9.8c-.2 1.6-.7 3-1.5 4.3.8.7 1.7 1.2 2.7 1.6l-.7 1.9c-1.2-.5-2.3-1.1-3.3-2-1 1-2.3 1.8-3.8 2.4L2.4 12.4c1.2-.5 2.2-1.1 3-1.9-.7-1-1.2-2.1-1.5-3.3l1.9-.4c.2 1 .6 1.9 1.1 2.7.6-1 1-2.1 1.2-3.3H4V4zm12 0h2l4.5 16h-2.2l-1-3.8h-4.6L13.7 20h-2.2L16 4zm-.4 10.2h3.6L17.4 7l-1.8 7.2z" fill="currentColor"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="M12 2l1.9 5.6L19.5 9l-5.6 1.9L12 16.5l-1.9-5.6L4.5 9l5.6-1.4L12 2zm6 12 .9 2.6 2.6.9-2.6.9L18 21l-.9-2.6-2.6-.9 2.6-.9L18 14zM6 15l.7 2 2 .7-2 .7L6 20.4l-.7-2-2-.7 2-.7L6 15z" fill="currentColor"/></symbol>
+    <symbol id="i-wave" viewBox="0 0 24 24"><path d="M2 12h2.2l1.4-5 2.2 10 2.3-14 2.3 18 2.2-11 1.6 5h5.8v2h-7.2l-1.6-5-2.2 11-2.3-18-2.3 14L5.8 9 4.9 14H2z" fill="currentColor"/></symbol>
+  </defs>
+</svg>
+
+<header class="nav">
+  <a class="brand" href="#top">
+    <span class="brand-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-wave"/></svg></span>
+    <span class="brand-text">MOSS<span>Live</span></span>
+    <span class="brand-tag" data-i18n="brand.tag">本地复刻版</span>
+  </a>
+  <nav class="nav-links">
+    <a href="#characters" data-i18n="nav.try">试用</a>
+    <a href="#features" data-i18n="nav.features">能力</a>
+    <a href="#how" data-i18n="nav.how">实现说明</a>
+  </nav>
+  <div class="nav-right">
+    <div class="status-pill" id="statusPill" title="服务状态">
+      <span class="dot"></span><span class="status-text" data-i18n="status.checking">检测中</span>
+    </div>
+    <button class="lang-btn" id="langBtn" type="button" aria-label="切换语言">EN</button>
+  </div>
+</header>
+
+<main id="top">
+
+  <section class="hero" aria-labelledby="hero-title">
+    <p class="eyebrow"><span class="pulse-dot"></span><span data-i18n="hero.eyebrow">MOSS-Live 1.0 · 全双工实时交互</span></p>
+    <h1 id="hero-title">
+      <span data-i18n="hero.h1a">边听边说，</span><br />
+      <span class="muted-line" data-i18n="hero.h1b">像打电话一样自然</span>
+    </h1>
+    <p class="lede" data-i18n="hero.lede">
+      它一边说一边听，分得清“嗯，对”的附和、思考时的停顿和真正的打断；需要时还能看见画面、边听边译、把复杂任务放到后台。
+    </p>
+    <div class="hero-actions">
+      <a class="btn btn-primary" href="#characters" data-i18n="hero.cta">开始一次通话</a>
+      <a class="btn btn-ghost" href="#how" data-i18n="hero.cta2">它是怎么实现的</a>
+    </div>
+  </section>
+
+  <section class="stage-section" id="characters" aria-label="角色">
+    <div class="stage" id="characterStage">
+      <!-- 角色卡片由 JS 渲染，未渲染时给出骨架 -->
+      <div class="character is-placeholder">
+        <div class="orb" aria-hidden="true"><span class="orb-halo"></span><span class="orb-core"></span></div>
+        <p class="character-name">Luna</p>
+      </div>
+      <div class="character is-placeholder">
+        <div class="orb" aria-hidden="true"><span class="orb-halo"></span><span class="orb-core"></span></div>
+        <p class="character-name">Leo</p>
+      </div>
+    </div>
+    <div class="stage-foot">
+      <p class="stage-hint" data-i18n="stage.hint">点击电话开始通话 · 需要麦克风权限，画面可选</p>
+      <div class="scenario-row" id="scenarioRow"></div>
+    </div>
+  </section>
+
+  <section class="section" id="features" aria-labelledby="features-title">
+    <div class="section-head">
+      <p class="eyebrow" data-i18n="feat.eyebrow">能力</p>
+      <h2 id="features-title" data-i18n="feat.title">像人一样听，像助理一样办事</h2>
+      <p class="section-lede" data-i18n="feat.lede">边听边说，靠语义判断什么时候该接话、该等待、该停下来。</p>
+    </div>
+    <div class="feature-grid">
+      <article class="feature"><span class="feature-no">01</span><h3 data-i18n="feat.1t">自然的对话节奏</h3><p data-i18n="feat.1d">你表示认同时它继续说，你打断时立刻停下；你在思考时它等你说完。</p></article>
+      <article class="feature"><span class="feature-no">02</span><h3 data-i18n="feat.2t">分得清谁在跟它说话</h3><p data-i18n="feat.2d">多人场景下只回应说给它听的那句，不插嘴旁人的闲聊。</p></article>
+      <article class="feature"><span class="feature-no">03</span><h3 data-i18n="feat.3t">记得自己说到哪儿</h3><p data-i18n="feat.3d">被打断后从实际说到的那个字接着讲，不从头再来。</p></article>
+      <article class="feature"><span class="feature-no">04</span><h3 data-i18n="feat.4t">边听边译</h3><p data-i18n="feat.4d">你说话的同时就在翻译，不必等整段说完才开始。</p></article>
+      <article class="feature"><span class="feature-no">05</span><h3 data-i18n="feat.5t">边说边办事</h3><p data-i18n="feat.5d">需要实时信息就去查，复杂任务放后台，合适的时候再把结果带回来。</p></article>
+      <article class="feature"><span class="feature-no">06</span><h3 data-i18n="feat.6t">看得见，也会主动</h3><p data-i18n="feat.6d">支持摄像头与屏幕共享，约定好规则后，条件满足它会主动开口。</p></article>
+    </div>
+  </section>
+
+  <section class="section" id="how" aria-labelledby="how-title">
+    <div class="section-head">
+      <p class="eyebrow" data-i18n="how.eyebrow">实现说明</p>
+      <h2 id="how-title" data-i18n="how.title">一条 WebSocket，三种数据流</h2>
+      <p class="section-lede" data-i18n="how.lede">
+        浏览器无法在 WebSocket 握手时携带 Authorization 头，API Key 也不能出现在前端。所以本项目在中间加了一层本地中继：鉴权、清洗、转发都由它完成。
+      </p>
+    </div>
+    <div class="flow">
+      <div class="flow-node">
+        <span class="flow-kicker" data-i18n="how.n1k">前端</span>
+        <strong data-i18n="how.n1">浏览器</strong>
+        <p data-i18n="how.n1d">麦克风 16 kHz PCM、摄像头/屏幕 JPEG、播放回执</p>
+      </div>
+      <div class="flow-arrow" aria-hidden="true"></div>
+      <div class="flow-node is-accent">
+        <span class="flow-kicker" data-i18n="how.n2k">本地中继</span>
+        <strong data-i18n="how.n2">FastAPI 服务</strong>
+        <p data-i18n="how.n2d">注入 Bearer 密钥、校验指令、限制帧大小、统计指标</p>
+      </div>
+      <div class="flow-arrow" aria-hidden="true"></div>
+      <div class="flow-node">
+        <span class="flow-kicker" data-i18n="how.n3k">上游</span>
+        <strong data-i18n="how.n3">MOSS-Live</strong>
+        <p data-i18n="how.n3d">全双工语音模型：转写、回答、语音、打断</p>
+      </div>
+    </div>
+    <ul class="tech-list">
+      <li><span class="tech-key">AudioWorklet</span><span data-i18n="how.t1">48 kHz 采集实时重采样到 16 kHz PCM S16LE，20 ms 一帧上行</span></li>
+      <li><span class="tech-key">WebAudio</span><span data-i18n="how.t2">48 kHz 下行音频分块入队播放，按实际播放完成回执，可即时打断</span></li>
+      <li><span class="tech-key">tagged-v1</span><span data-i18n="how.t3">0x00 音频 / 0x01 摄像头 / 0x02 屏幕，同一条连接复用</span></li>
+      <li><span class="tech-key">JPEG 1 FPS</span><span data-i18n="how.t4">画面按帧发送，摄像头长边 640 px、屏幕 1024 px，质量 0.8</span></li>
+    </ul>
+  </section>
+
+  <footer class="footer">
+    <div class="footer-left">
+      <span class="brand-text small">MOSS<span>Live</span></span>
+      <span class="footer-sep">·</span>
+      <span data-i18n="footer.note">非官方复刻，仅用于技术演示</span>
+    </div>
+    <div class="footer-right">
+      <a href="/api/docs" target="_blank" rel="noopener" data-i18n="footer.api">接口文档</a>
+      <span class="footer-sep">·</span>
+      <span id="versionText">v1.0.0</span>
+    </div>
+  </footer>
+</main>
+
+<!-- ============================ 通话界面 ============================ -->
+<div class="call" id="call" hidden aria-modal="true" role="dialog" aria-label="通话">
+  <div class="call-bg" aria-hidden="true"></div>
+
+  <div class="call-top">
+    <div class="call-meta">
+      <span class="live-dot"></span>
+      <span class="call-status" id="callStatus" data-i18n="call.connecting">正在连接</span>
+      <span class="call-timer" id="callTimer">00:00</span>
+    </div>
+    <div class="call-top-actions">
+      <button class="icon-chip" id="transcriptBtn" type="button" aria-pressed="false">
+        <svg viewBox="0 0 24 24"><use href="#i-caption"/></svg><span data-i18n="call.transcript">字幕</span>
+      </button>
+      <button class="icon-chip" id="debugBtn" type="button">
+        <svg viewBox="0 0 24 24"><use href="#i-bolt"/></svg><span data-i18n="dbg.title">协议事件</span>
+      </button>
+      <button class="icon-chip" id="settingsBtn" type="button">
+        <svg viewBox="0 0 24 24"><use href="#i-settings"/></svg><span data-i18n="call.settings">人设</span>
+      </button>
+      <button class="icon-chip danger" id="endBtnTop" type="button" aria-label="结束通话">
+        <svg viewBox="0 0 24 24"><use href="#i-close"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="call-main">
+    <div class="call-stage">
+      <div class="orb orb-lg" id="callOrb" data-tint="warm" data-speaking="false" aria-hidden="true">
+        <span class="orb-halo"></span>
+        <span class="orb-core"></span>
+        <span class="orb-ring"></span>
+        <span class="orb-ring orb-ring-2"></span>
+      </div>
+      <p class="call-name" id="callName">Luna</p>
+      <p class="call-state" id="callState" aria-live="polite" data-i18n="call.waiting">准备中…</p>
+      <div class="level-meter" aria-hidden="true"><span class="level-fill" id="levelFill"></span></div>
+    </div>
+
+    <aside class="video-dock" id="videoDock" hidden>
+      <figure class="video-tile" id="cameraTile" data-active="false">
+        <video id="cameraVideo" playsinline muted></video>
+        <figcaption><span class="tile-dot"></span><span data-i18n="call.camera">摄像头</span></figcaption>
+        <span class="tile-empty" data-i18n="call.cameraOff">未开启</span>
+      </figure>
+      <figure class="video-tile" id="screenTile" data-active="false">
+        <video id="screenVideo" playsinline muted></video>
+        <figcaption><span class="tile-dot"></span><span data-i18n="call.screen">屏幕</span></figcaption>
+        <span class="tile-empty" data-i18n="call.screenOff">未共享</span>
+      </figure>
+    </aside>
+  </div>
+
+  <div class="captions" id="captions" aria-live="polite">
+    <p class="cap-line cap-user" id="capUser" hidden><span class="cap-tag" data-i18n="call.you">你</span><span class="cap-text"></span></p>
+    <p class="cap-line cap-ai" id="capAi"><span class="cap-tag" id="capAiTag">Luna</span><span class="cap-text"></span></p>
+  </div>
+
+  <div class="call-controls">
+    <button class="ctl" id="micBtn" type="button" data-on="true" aria-pressed="true">
+      <svg viewBox="0 0 24 24" class="ico-on"><use href="#i-mic"/></svg>
+      <svg viewBox="0 0 24 24" class="ico-off"><use href="#i-mic-off"/></svg>
+      <span data-i18n="call.mic">麦克风</span>
+    </button>
+    <button class="ctl" id="camBtn" type="button" data-on="false" aria-pressed="false">
+      <svg viewBox="0 0 24 24"><use href="#i-camera"/></svg>
+      <span data-i18n="call.camera">摄像头</span>
+    </button>
+    <button class="ctl" id="screenBtn" type="button" data-on="false" aria-pressed="false">
+      <svg viewBox="0 0 24 24"><use href="#i-screen"/></svg>
+      <span data-i18n="call.screenShare">共享屏幕</span>
+    </button>
+    <button class="ctl" id="focusBtn" type="button" data-on="false" hidden>
+      <svg viewBox="0 0 24 24"><use href="#i-eye"/></svg>
+      <span id="focusLabel" data-i18n="call.focusAuto">关注画面</span>
+    </button>
+    <button class="ctl ctl-end" id="endBtn" type="button">
+      <svg viewBox="0 0 24 24"><use href="#i-hangup"/></svg>
+      <span data-i18n="call.end">结束</span>
+    </button>
+  </div>
+
+  <section class="transcript-panel" id="transcriptPanel" hidden aria-label="通话记录">
+    <div class="tp-head">
+      <h2 data-i18n="tp.title">通话记录</h2>
+      <div class="tp-actions">
+        <button class="icon-chip ghost" id="downloadBtn" type="button">
+          <svg viewBox="0 0 24 24"><use href="#i-download"/></svg><span data-i18n="tp.export">导出</span>
+        </button>
+        <button class="icon-chip ghost" id="closeTranscript" type="button" aria-label="关闭">
+          <svg viewBox="0 0 24 24"><use href="#i-close"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="tp-body" id="transcriptBody">
+      <p class="tp-empty" data-i18n="tp.empty">通话开始后，这里会出现完整对话。</p>
+    </div>
+    <div class="tp-foot">
+      <span id="tpStats">0</span>
+      <span data-i18n="tp.turns">轮对话</span>
+    </div>
+  </section>
+
+  <section class="debug-panel" id="debugPanel" hidden aria-label="协议事件">
+    <div class="tp-head">
+      <h2 data-i18n="dbg.title">协议事件</h2>
+      <div class="tp-actions">
+        <button class="icon-chip ghost" id="clearDebug" type="button"><span data-i18n="dbg.clear">清空</span></button>
+        <button class="icon-chip ghost" id="closeDebug" type="button" aria-label="关闭">
+          <svg viewBox="0 0 24 24"><use href="#i-close"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="dbg-body" id="debugBody"></div>
+    <p class="dbg-hint" data-i18n="dbg.hint">按 “D” 可随时开关本面板</p>
+  </section>
+
+  <div class="toast-wrap" id="toastWrap" aria-live="assertive"></div>
+</div>
+
+<!-- ============================ 人设设置 ============================ -->
+<div class="modal" id="settingsModal" hidden role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+  <div class="modal-card">
+    <div class="modal-head">
+      <h2 id="settingsTitle" data-i18n="set.title">人设与场景</h2>
+      <button class="icon-chip ghost" id="closeSettings" type="button" aria-label="关闭">
+        <svg viewBox="0 0 24 24"><use href="#i-close"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <label class="field">
+        <span class="field-label" data-i18n="set.name">角色名称</span>
+        <input id="setName" type="text" maxlength="64" autocomplete="off" />
+      </label>
+      <label class="field">
+        <span class="field-label" data-i18n="set.prompt">人设描述（persona.prompt）</span>
+        <textarea id="setPrompt" rows="5" maxlength="8000"></textarea>
+        <span class="field-hint" data-i18n="set.promptHint">决定它是谁、什么语气，最多 8000 字。</span>
+      </label>
+      <label class="field">
+        <span class="field-label" data-i18n="set.instructions">业务指令（instructions）</span>
+        <textarea id="setInstructions" rows="3" maxlength="8000"></textarea>
+        <span class="field-hint" data-i18n="set.instructionsHint">规则性要求，例如“只用一句话回答”。</span>
+      </label>
+      <div class="field">
+        <span class="field-label" data-i18n="set.scenario">场景</span>
+        <div class="chip-group" id="setScenario"></div>
+      </div>
+      <p class="modal-note" data-i18n="set.note">修改会在下一次通话生效；通话中不可更改人设（上游会拒绝）。</p>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" id="resetPersona" type="button" data-i18n="set.reset">恢复默认</button>
+      <button class="btn btn-primary" id="savePersona" type="button" data-i18n="set.save">保存</button>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="/static/js/app.js"></script>
+</body>
+</html>

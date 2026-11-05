@@ -1,0 +1,18 @@
+services:
+  moss-live:
+    build: .
+    image: moss-live-demo:1.0.0
+    container_name: moss-live
+    restart: unless-stopped
+    ports:
+      # 只绑本机，公网访问请通过反向代理（见 deploy/nginx.conf.example）
+      - "127.0.0.1:8000:8000"
+    env_file:
+      - .env
+    environment:
+      APP_HOST: 0.0.0.0
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
