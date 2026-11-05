@@ -160,7 +160,7 @@ $ python scripts/browser_test.py
 ## 5. 复现方式
 
 ```bash
-cd /Users/sgk324/python/moss
+cd /Users/xxx/moss-live
 source .venv/bin/activate
 
 # 1) 单元 + 接口 + 中继（不消耗 API 额度）

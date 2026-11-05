@@ -6,6 +6,42 @@ Docker；以及对外暴露时的 Nginx/TLS 配置、安全清单、升级回滚
 > 部署前务必确认：`MOSS_API_KEY` 有效且有 MOSS-Live 权限；服务器能访问
 > `api.mosi.cn:443`（WSS）。用 `curl -I https://api.mosi.cn/v1/models` 快速验证网络。
 
+> **路径约定**：本文档中的 `/Users/xxx/moss-live` 是占位符，请替换成你的真实项目目录，
+> 推荐形如 `/Users/<你的用户名>/python/moss-live`。后文所有命令都以此路径为前提。
+
+## 安装路径务必先想清楚
+
+`scripts/install_macos_launchd.sh` 会把**执行安装那一刻的绝对路径**写死进 LaunchAgent 的
+plist，三处都会固化：`ProgramArguments` 里的解释器路径、`WorkingDirectory`、日志输出路径。
+这一层是 launchd 的硬性要求（它不接受相对路径），所以路径一旦定下就不要轻易改。
+
+**装完之后重命名或移动项目目录，会出现两个典型症状：**
+
+1. **端口杀不掉** —— 旧进程还占着 8000，`kill` 掉几秒内又有一个顶上。
+   原因是 `KeepAlive` 在起作用：launchd 认为上次是异常退出，会不断重新拉起。
+   只有把目录改回去、或卸载 LaunchAgent 才能根治。
+2. **`launchctl print` 里全是失败记录** —— `state = spawn scheduled`、
+   `last exit code = 78: EX_CONFIG`、`runs` 数值持续增长。这是 launchd 按旧路径找不到
+   解释器，启动必然失败，但仍按 `ThrottleInterval`（默认 10 秒）反复重试。
+
+排查与处理：
+
+```bash
+# 看服务状态（能看到 program / working directory 是不是旧路径）
+launchctl print "gui/$(id -u)/com.moss.live" | head -20
+
+# 确认端口被谁占着
+lsof -nP -iTCP:8000 -sTCP:LISTEN
+
+# 正确做法：先卸载，移动目录，再重新安装（会写入新路径）
+./scripts/install_macos_launchd.sh uninstall
+mv /Users/xxx/moss-live /Users/xxx/新目录名
+cd /Users/xxx/新目录名 && ./scripts/install_macos_launchd.sh install
+```
+
+> 额外提醒：安装路径**不要包含空格和中文字符**。launchd 本身能接受，但 plist 里的
+> 路径不转义，配合部分 shell 脚本容易出问题，排障成本很高。
+
 ---
 
 ## 0. 部署形态怎么选
@@ -30,7 +66,7 @@ Docker；以及对外暴露时的 Nginx/TLS 配置、安全清单、升级回滚
 python3 --version
 
 # 进入项目
-cd /Users/sgk324/python/moss
+cd /Users/xxx/moss-live
 
 # 虚拟环境 + 依赖
 python3 -m venv .venv
@@ -46,6 +82,10 @@ $EDITOR .env      # 填 MOSS_API_KEY
 目录权限：运行用户需要对项目目录有读写权限（写 `logs/`、`artifacts/`）。
 端口：默认 `127.0.0.1:8000`，被占用时改 `APP_PORT` 或启动参数
 `--port 8010`（同时改 Nginx 上游）。
+
+> **先把项目放在最终位置，再装依赖和自启。** 目录定下来之前不要跑
+> `install_macos_launchd.sh`——它会把当前绝对路径写进 plist。装完再改名/移动，
+> 就得 `uninstall` 一次再 `install` 一次（详见文首「安装路径务必先想清楚」）。
 
 自检：
 
@@ -220,7 +260,7 @@ Caddy 默认已处理 WebSocket 升级。
 
 ```bash
 # 升级
-cd /Users/sgk324/python/moss
+cd /Users/xxx/moss-live
 git pull                     # 或替换文件
 source .venv/bin/activate
 pip install -r requirements.txt
@@ -281,12 +321,15 @@ python scripts/e2e_live.py
 
 ---
 
-## 11. 本机部署现状（已执行）
+## 11. 本机部署现状（参考示例）
+
+> 下表是某台机器上的实际部署记录，**路径均为占位符**，安装时替换成你自己的目录。
+> 把它当作"装好之后应该长什么样"的对照，而不是可以直接复制的命令。
 
 | 项目 | 值 |
 | --- | --- |
-| 代码目录 | `/Users/sgk324/python/moss` |
-| 虚拟环境 | `/Users/sgk324/python/moss/.venv`（Python 3.13.12） |
+| 代码目录 | `/Users/xxx/moss-live` |
+| 虚拟环境 | `/Users/xxx/moss-live/.venv`（Python 3.13.12） |
 | 监听 | `http://127.0.0.1:8000` |
 | 运行模式 | 生产模式：`APP_TEST_ASSETS=false`（`/test-assets` 返回 404） |
 | 主进程 | `uvicorn app.main:app --host 127.0.0.1 --port 8000` |
@@ -306,8 +349,8 @@ python scripts/e2e_live.py
 
 ```zsh
 # >>> MOSS Live autostart >>>
-if [ -x /Users/sgk324/python/moss/scripts/autostart.sh ]; then
-  /Users/sgk324/python/moss/scripts/autostart.sh --quiet >/dev/null 2>&1 &!
+if [ -x /Users/xxx/moss-live/scripts/autostart.sh ]; then
+  /Users/xxx/moss-live/scripts/autostart.sh --quiet >/dev/null 2>&1 &!
 fi
 # <<< MOSS Live autostart <<<
 ```
@@ -318,7 +361,7 @@ fi
 日常操作：
 
 ```bash
-cd /Users/sgk324/python/moss
+cd /Users/xxx/moss-live
 ./scripts/autostart.sh            # 确保在跑（会等就绪并打印 pid）
 ./scripts/autostart.sh --status   # 只看状态，退出码 0=运行中 1=未运行
 ./scripts/autostart.sh --stop     # 停止（下次开终端会再被拉起）
@@ -342,7 +385,7 @@ cd /Users/sgk324/python/moss
 完全不需要开终端**，把 LaunchAgent 注册上（plist 已生成，`plutil -lint` 通过）：
 
 ```bash
-cd /Users/sgk324/python/moss
+cd /Users/xxx/moss-live
 ./scripts/install_macos_launchd.sh install
 ./scripts/install_macos_launchd.sh status     # 应看到 state = running 与 pid
 ```
@@ -361,7 +404,7 @@ launchctl print gui/$(id -u)/com.moss.live | head -20
 ### 11.3 前台临时启动
 
 ```bash
-cd /Users/sgk324/python/moss && ./scripts/run.sh
+cd /Users/xxx/moss-live && ./scripts/run.sh
 ```
 
 服务本身无状态，随时 kill 再起不影响使用（通话是即时会话，不做持久化）。
@@ -384,12 +427,12 @@ cd /Users/sgk324/python/moss && ./scripts/run.sh
 ### 12.1 在旧机器打包
 
 ```bash
-cd /Users/sgk324
-tar --exclude='moss/.venv' \
-    --exclude='moss/logs' \
-    --exclude='moss/artifacts' \
+cd /Users/xxx
+tar --exclude='moss-live/.venv' \
+    --exclude='moss-live/logs' \
+    --exclude='moss-live/artifacts' \
     --exclude='__pycache__' \
-    -czf moss-live.tar.gz moss
+    -czf moss-live.tar.gz moss-live
 ls -lh moss-live.tar.gz     # 约 1 MB
 ```
 
@@ -428,9 +471,10 @@ cd moss
 | Linux | 用 `deploy/moss-live.service`，`systemctl enable --now moss-live` |
 | 任意 | `docker compose up -d --build`（见 §5） |
 
-> 注意：§11.1 的 shell 钩子里写的是本机的绝对路径
-> `/Users/sgk324/python/moss/scripts/autostart.sh`。换设备或换目录时要同步改，
-> 或者干脆改用 LaunchAgent / systemd。
+> 注意：§11.1 的 shell 钩子里写的是**绝对路径**（示例 `/Users/xxx/moss-live/scripts/autostart.sh`）。
+> 钩子在 shell 启动时执行，拿不到项目上下文，所以只能写死。换设备、换目录、改用户名时
+> **必须同步修改**，否则钩子会静默失败——既不报错也不启动。装钩子前先确认项目已在最终位置。
+> 更省心的做法是改用 LaunchAgent（`install_macos_launchd.sh` 会自动写入当前路径）或 systemd。
 
 ### 12.4 从别的设备访问（手机、另一台电脑）
 

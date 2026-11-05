@@ -88,6 +88,13 @@ Esc 双击结束通话、移动端布局、服务端令牌桶式限额、运行�
 
 ## 4. 快速开始（本机）
 
+> **先决定安装路径，再动手。** 下面命令里的 `/Users/xxx/moss-live` 是占位符，
+> 请替换成你自己的真实目录（例如 `/Users/你的用户名/python/moss-live`）。
+> 一旦装过 `install_macos_launchd.sh` 或往 `~/.zshrc` 里加过自启钩子，绝对路径就被固化了：
+> 之后重命名或移动目录，会表现为"8000 端口杀不掉、进程反复复活"。
+> 要移动目录，请先卸载自启（`./scripts/install_macos_launchd.sh uninstall`），移动后重新安装。
+> 路径里不要带空格和中文。详见 [docs/DEPLOY.md](docs/DEPLOY.md)。
+
 一步到位（推荐）：
 
 ```bash
@@ -158,7 +165,7 @@ macOS / Linux 已验证；Windows 请用 WSL2 或 Docker。
 **第一步：旧机器打包**
 
 ```bash
-cd /Users/sgk324
+cd /Users/xxx
 tar --exclude='moss-live/.venv' \
     --exclude='moss-live/logs' \
     --exclude='moss-live/artifacts' \
