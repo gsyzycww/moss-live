@@ -17,6 +17,23 @@ HOST="${HOST:-127.0.0.1}"
 if [ ! -d "${VENV_DIR}" ]; then
   echo "==> 创建虚拟环境 ${VENV_DIR}"
   "${PYTHON_BIN}" -m venv "${VENV_DIR}"
+else
+  # 目录改名/搬家后，venv 里 pip、uvicorn 的 shebang 仍指向旧解释器。
+  # 直接 source activate 后调用 pip 会报 bad interpreter，这里提前交给 install.sh 重建。
+  for _s in pip uvicorn; do
+    [ -f "${VENV_DIR}/bin/${_s}" ] || continue
+    _interp="$(head -1 "${VENV_DIR}/bin/${_s}" | sed 's/^#!//')"
+    _interp="${_interp%% *}"          # 兼容 "#!/usr/bin/env python3"
+    case "${_interp}" in
+      /*)
+        if [ ! -x "${_interp}" ]; then
+          echo "==> 虚拟环境已失效（启动器指向 ${_interp}），正在重新准备"
+          "${ROOT}/scripts/install.sh" || exit 1
+          break
+        fi
+        ;;
+    esac
+  done
 fi
 
 # shellcheck disable=SC1091

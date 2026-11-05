@@ -71,7 +71,18 @@ case "${1:-}" in
     fi
     ensure_plist
     launchctl bootout "gui/${UID}/${LABEL}" 2>/dev/null || true
-    launchctl bootstrap "gui/${UID}" "${PLIST}"
+    if ! launchctl bootstrap "gui/${UID}" "${PLIST}"; then
+      {
+        echo "!! 注册失败。常见于受限会话（launchctl 返回 5: Input/output error）。"
+        echo "   plist 已经写到：${PLIST}"
+        echo "   注意：这个文件留在 LaunchAgents 目录里，下次登录时系统仍会自动加载它，"
+        echo "         等于未经确认就开机自启。不想这样就先卸掉："
+        echo "           ./scripts/install_macos_launchd.sh uninstall"
+        echo "   想启用的话，在普通终端里执行一次："
+        echo "           launchctl bootstrap gui/\$(id -u) '${PLIST}'"
+      } >&2
+      exit 1
+    fi
     launchctl enable "gui/${UID}/${LABEL}"
     echo "已安装并启动：http://127.0.0.1:${PORT}"
     echo "日志：${LOG_DIR}/moss-live.log"

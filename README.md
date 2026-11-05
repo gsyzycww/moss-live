@@ -283,6 +283,7 @@ fi
 | ----------------------- | ------------------------------- | ------------------------------------------------- |
 | `MOSS_API_KEY`          | 空                              | 必填。只保存在服务端，`/api/health` 只回显末 4 位 |
 | `MOSS_WS_ENDPOINT`      | `wss://api.mosi.cn/v1/realtime` | 上游实时接口                                      |
+| `MOSS_REST_ENDPOINT`    | `https://api.mosi.cn`           | 上游 REST 地址，`gen_greeting.py` 合成问候时用    |
 | `MOSS_MODEL`            | `moss-live-1.0`                 | 模型 ID                                           |
 | `MOSS_TTS_MODEL`        | `moss-tts-1.5-flash`            | 重录开场问候时用来合成「模拟用户语音」的 TTS 模型 |
 | `APP_HOST` / `APP_PORT` | `127.0.0.1` / `8000`            | 监听地址                                          |

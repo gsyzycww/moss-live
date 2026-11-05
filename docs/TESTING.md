@@ -178,7 +178,7 @@ python scripts/browser_test.py --headed   # 可视化观察
 ```
 
 产物：`artifacts/screenshots/*.png`（7 张）、`artifacts/e2e-response.wav`（模型回答音频，
-可用 `ffplay`/QuickTime 试听，也可再用 `moss-transcribe-1.0` 转写验证内容）。
+可用 `ffplay`/QuickTime 试听，也可用平台的语音转写能力再核对一遍文字内容）。
 
 ---
 

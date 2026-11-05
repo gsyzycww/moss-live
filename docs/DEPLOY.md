@@ -23,6 +23,11 @@ plist，三处都会固化：`ProgramArguments` 里的解释器路径、`Working
 2. **`launchctl print` 里全是失败记录** —— `state = spawn scheduled`、
    `last exit code = 78: EX_CONFIG`、`runs` 数值持续增长。这是 launchd 按旧路径找不到
    解释器，启动必然失败，但仍按 `ThrottleInterval`（默认 10 秒）反复重试。
+3. **启动报 `bad interpreter: no such file or directory`** —— `.venv` 里 `pip`、
+   `uvicorn` 这类启动器在创建时就把解释器的绝对路径写进了 shebang。`bin/python` 本身
+   仍然可执行，所以「venv 存在就能用」的旧判断会漏掉这种情况。现在 `install.sh` 会主动
+   识别：发现 shebang 指向不存在的解释器时，把旧环境改名为 `.venv.broken-<时间戳>`
+   后重建，不需要手工 `rm -rf .venv`。
 
 排查与处理：
 
@@ -159,21 +164,25 @@ launchctl kickstart -k gui/$(id -u)/com.moss.live
 ## 4. 方式 C：Linux systemd
 
 ```bash
-sudo useradd -r -m moss
-sudo mkdir -p /opt/moss && sudo chown moss:moss /opt/moss
-# 用 rsync/scp 把项目同步到 /opt/moss（不要带 .venv）
-sudo -u moss python3 -m venv /opt/moss/.venv
-sudo -u moss /opt/moss/.venv/bin/pip install -r /opt/moss/requirements.txt
-sudo -u moss cp /opt/moss/.env.example /opt/moss/.env
-sudo -u moss $EDITOR /opt/moss/.env       # 填密钥
-sudo chmod 600 /opt/moss/.env
+sudo useradd -r -m moss-live
+sudo mkdir -p /opt/moss-live && sudo chown moss-live:moss-live /opt/moss-live
+# 用 rsync/scp 把项目同步到 /opt/moss-live（不要带 .venv）
+sudo -u moss-live python3 -m venv /opt/moss-live/.venv
+sudo -u moss-live /opt/moss-live/.venv/bin/pip install -r /opt/moss-live/requirements.txt
+sudo -u moss-live cp /opt/moss-live/.env.example /opt/moss-live/.env
+sudo -u moss-live $EDITOR /opt/moss-live/.env       # 填密钥
+sudo chmod 600 /opt/moss-live/.env
 
-sudo cp /opt/moss/deploy/moss-live.service /etc/systemd/system/
+sudo cp /opt/moss-live/deploy/moss-live.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now moss-live
 sudo systemctl status moss-live
 sudo journalctl -u moss-live -f
 ```
+
+> 安装目录可以换成任意位置，但 `deploy/moss-live.service` 里的 `User`、
+> `WorkingDirectory`、`EnvironmentFile`、`ExecStart` 四处要同步改，
+> 否则 systemd 启动会以 `200/CHDIR` 或 `203/EXEC` 失败。
 
 ---
 
@@ -273,7 +282,7 @@ curl -s http://127.0.0.1:8000/api/health | head -c 200
 python scripts/e2e_live.py
 ```
 
-回滚：保留一份上一个版本的目录（如 `moss-20261101/`），把 LaunchAgent 的
+回滚：保留一份上一个版本的目录（如 `moss-live-20261101/`），把 LaunchAgent 的
 `WorkingDirectory` 指过去并 `restart` 即可；数据库/状态都在外部，回滚无数据迁移。
 
 ---
@@ -312,6 +321,7 @@ python scripts/e2e_live.py
 | 现象 | 可能原因 | 处理 |
 | --- | --- | --- |
 | 页面 502 | 后端没起/端口不对 | `launchctl print`、`systemctl status`、`lsof -i:8000` |
+| 启动报 `bad interpreter` | 项目目录改名/搬家后 `.venv` 里的 shebang 失效 | 跑一次 `./scripts/install.sh`，会自动重建 venv |
 | 状态灯「缺少密钥」 | `.env` 未填或未重启 | 填 `MOSS_API_KEY` 后 restart |
 | 一直「正在连接」 | 上游 401 / 网络不通 | 看日志 `upstream_http_401` / `upstream_unreachable` |
 | 连上就没声音 | 浏览器自动播放策略 | 用户点击后创建 AudioContext（本项目已如此），检查是否静音标签页 |

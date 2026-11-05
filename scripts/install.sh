@@ -52,9 +52,33 @@ ok "Python ${PY_VER}（${PYTHON_BIN}）"
 
 # ---------- 2. 虚拟环境 ----------
 echo "[2/5] 准备虚拟环境 ${VENV_DIR}"
-if [ -x "${VENV_DIR}/bin/python" ]; then
+
+# venv 里的 pip / uvicorn 是启动器脚本，创建时就把解释器绝对路径写进了 shebang。
+# 项目目录一旦改名或搬家，这些 shebang 仍指向旧路径，运行时表现为
+#   bad interpreter: no such file or directory
+# 而 `bin/python` 本身仍然可执行，所以「存在即复用」的旧判断会漏掉这种情况。
+venv_stale() {
+  [ -d "${VENV_DIR}" ] || return 1
+  local s interp
+  for s in pip uvicorn; do
+    [ -f "${VENV_DIR}/bin/${s}" ] || continue
+    head -1 "${VENV_DIR}/bin/${s}" | grep -q '^#!' || continue
+    interp="$(head -1 "${VENV_DIR}/bin/${s}" | sed 's/^#!//')"
+    # 只取第一个词：兼容 "#!/usr/bin/env python3" 这种写法
+    [ -x "${interp%% *}" ] || return 0
+  done
+  return 1
+}
+
+if [ -x "${VENV_DIR}/bin/python" ] && ! venv_stale; then
   ok "已存在，复用"
 else
+  if [ -d "${VENV_DIR}" ]; then
+    BAK="${VENV_DIR}.broken-$(date +%Y%m%d%H%M%S)"
+    mv "${VENV_DIR}" "${BAK}" || die "无法移走失效的虚拟环境 ${VENV_DIR}"
+    warn "旧虚拟环境已失效（启动器指向旧路径），已改名为 ${BAK}"
+    info "确认新环境正常后可以删掉它：rm -rf ${BAK}"
+  fi
   "${PYTHON_BIN}" -m venv "${VENV_DIR}" || die "创建虚拟环境失败（Debian/Ubuntu 可能需要 apt install python3-venv）"
   ok "已创建"
 fi

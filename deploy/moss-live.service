@@ -1,6 +1,10 @@
 # Linux systemd 服务示例
 #   sudo cp deploy/moss-live.service /etc/systemd/system/
 #   sudo systemctl daemon-reload && sudo systemctl enable --now moss-live
+#
+# 下面四处路径必须与你的实际安装目录一致（本项目示例用 /opt/moss-live）：
+#   User / WorkingDirectory / EnvironmentFile / ExecStart
+# 换了目录要同步改，否则 systemd 会以 203/EXEC 或 200/CHDIR 失败。
 [Unit]
 Description=MOSS Live realtime demo (FastAPI relay)
 After=network-online.target
@@ -8,11 +12,11 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=moss
-Group=moss
-WorkingDirectory=/opt/moss
-EnvironmentFile=/opt/moss/.env
-ExecStart=/opt/moss/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+User=moss-live
+Group=moss-live
+WorkingDirectory=/opt/moss-live
+EnvironmentFile=/opt/moss-live/.env
+ExecStart=/opt/moss-live/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
 Restart=always
 RestartSec=3
 # 加固
