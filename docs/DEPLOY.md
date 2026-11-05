@@ -382,7 +382,7 @@ cd /Users/xxx/moss-live
 几个实现细节，都是踩过坑才补上的：
 
 - 健康检查必须带 `curl --noproxy '*'`。本机环境有 `HTTP_PROXY` 指向本地代理，
-  不绕过代理时健康检查会被转发出去，既慢又会误判成"服务没起"。
+  不绕过代理时健康检查会被转发出去，既慢又会误判成“服务没起”。
 - 并发锁用 PID 文件而不是目录：目录锁在进程被强杀时会残留，导致之后所有启动
   被静默跳过。PID 文件锁会检查持有者是否还活着，死了就当陈旧锁接管。
 - 变量后紧跟中文或全角符号时必须写 `${PORT}` 而不是 `$PORT`。某些 locale 下
@@ -390,7 +390,7 @@ cd /Users/xxx/moss-live
 
 ### 11.2 LaunchAgent 方案
 
-终端钩子依赖"你打开终端"这个动作。如果希望**登录即启动、崩溃自动重启、
+终端钩子依赖“你打开终端”这个动作。如果希望**登录即启动、崩溃自动重启、
 完全不需要开终端**，注册 LaunchAgent（plist 由脚本现场生成，路径取执行时的真实目录）：
 
 ```bash
@@ -422,7 +422,11 @@ cd /Users/xxx/moss-live && ./scripts/run.sh
 
 ## 12. 换一台设备安装（迁移）
 
-项目没有任何硬编码绝对路径，整个目录可以原样搬走。除 `.venv` 外全部文件加起来约 1 MB。
+> 本节是**权威版**，含先决条件、`.env` 取舍、证书选型与迁移后验证。
+> 只想快速搬一次机器的话，看 [README §4.1](../README.md#41-换一台设备安装) 的极简版即可。
+
+项目没有任何硬编码绝对路径，整个目录可以原样搬走。排除 `.venv` / `logs` / `artifacts` /
+`.git` 后，打包约 2 MB（主要成分：文档截图 1.2 MB、预生成问候音频 1.1 MB）。
 
 ### 12.0 先决条件
 
@@ -442,9 +446,10 @@ cd /Users/xxx
 tar --exclude='moss-live/.venv' \
     --exclude='moss-live/logs' \
     --exclude='moss-live/artifacts' \
+    --exclude='moss-live/.git' \
     --exclude='__pycache__' \
     -czf moss-live.tar.gz moss-live
-ls -lh moss-live.tar.gz     # 约 1 MB
+ls -lh moss-live.tar.gz     # 约 2 MB
 ```
 
 `.env` 要不要一起带走：
@@ -475,17 +480,15 @@ cd moss-live
 
 ### 12.3 让它常驻
 
-| 平台 | 做法 |
-| --- | --- |
-| macOS | `./scripts/install_macos_launchd.sh install`（登录自启、崩溃重启） |
-| macOS（无 launchd 权限） | `./scripts/autostart.sh` + 把钩子加进 `~/.zshrc`（见 §11.1） |
-| Linux | 用 `deploy/moss-live.service`，`systemctl enable --now moss-live` |
-| 任意 | `docker compose up -d --build`（见 §5） |
+常驻方式与平台对照表不再在这里重复维护，只看两处：
 
-> 注意：§11.1 的 shell 钩子里写的是**绝对路径**（示例 `/Users/xxx/moss-live/scripts/autostart.sh`）。
-> 钩子在 shell 启动时执行，拿不到项目上下文，所以只能写死。换设备、换目录、改用户名时
-> **必须同步修改**，否则钩子会静默失败——既不报错也不启动。装钩子前先确认项目已在最终位置。
-> 更省心的做法是改用 LaunchAgent（`install_macos_launchd.sh` 会自动写入当前路径）或 systemd。
+- **命令速查**：[README §4.2](../README.md#42-让它常驻)——四个平台各一行命令。
+- **细节与踩坑**：本文 [§11 自启方案与常见坑](#11-自启方案与常见坑)——两种 macOS 方式的
+  取舍、`launchctl` 报 `5: Input/output error` 时怎么办、钩子为什么必须写绝对路径。
+
+唯一需要在这里强调的：**装钩子前先确认项目已在最终位置**。钩子在 shell 启动时执行，
+拿不到项目上下文，所以只能写死绝对路径；换设备、换目录、改用户名时忘了同步修改，
+钩子会**静默失败**——既不报错也不启动。
 
 ### 12.4 从别的设备访问（手机、另一台电脑）
 
@@ -500,7 +503,7 @@ APP_HOST=0.0.0.0
 
 **第二步：上 HTTPS（不做这步一定失败）**
 
-浏览器只在"安全上下文"里给麦克风和摄像头：`localhost` 豁免，其余一律要求 HTTPS。
+浏览器只在“安全上下文”里给麦克风和摄像头：`localhost` 豁免，其余一律要求 HTTPS。
 用 `http://192.168.1.20:8000` 打开页面能看到界面，但点通话会拿不到麦克风。
 三种可行做法：
 

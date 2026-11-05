@@ -36,14 +36,15 @@ Esc 双击结束通话、移动端布局、服务端令牌桶式限额、运行�
 
 > 音色说明：`moss-live-1.0` 的输出音色由模型固定，`session.update` 不接受
 > `voice_id`（传了会被上游以 `invalid_public_request` 断开）。本项目用「人设 + 语气」
-> 区分 Luna 与 Leo，而不是音色。详见 [§7 协议事实](#7-已确认的上游协议事实)。
+> 区分 Luna 与 Leo，而不是音色。详见
+> [docs/DEVELOPMENT.md §3 上游协议事实](docs/DEVELOPMENT.md#3-上游协议事实实测)。
 
 > 开场问候：MOSS-Live 是「用户先开口」的模型 —— 会话配置完成后即使一直送静音，
 > 它也不会主动说话（实测 8 s 内零下行音频），所以官网只能用预生成音频的方式让人先开口。
 > 本项目用 `scripts/gen_greeting.py` 让模型**用后续回答的那个声音**说一句自我介绍，
 > 把这轮音频存成静态 WAV，接通后 0.4 s 播放。这样问候和正片是同一个音色，
 > 不会像外接 TTS 那样「打招呼一个声音、回答另一个声音」。
-> 仓库里已带 Luna / Leo × 中英共 4 条；改了人设想重录时见 [§4.2](#42-重新生成开场问候)。
+> 仓库里已带 Luna / Leo × 中英共 4 条；改了人设想重录时见 [§4.3](#43-重新生成开场问候)。
 
 ### 1.1 更多界面截图
 
@@ -81,6 +82,9 @@ Esc 双击结束通话、移动端布局、服务端令牌桶式限额、运行�
 2. API Key 不能出现在前端代码或网络请求里；
 3. 上游对 `session.update` 的字段校验极严（多一个键就断开），需要在服务端清洗。
 
+上游协议的全部实测结论（连接参数、媒体封装、下行节奏、打断回执等）集中在
+[docs/DEVELOPMENT.md §3](docs/DEVELOPMENT.md#3-上游协议事实实测)，改协议相关代码前先读那一节。
+
 ---
 
 ## 3. 环境要求
@@ -103,7 +107,7 @@ Esc 双击结束通话、移动端布局、服务端令牌桶式限额、运行�
 > **先决定安装路径，再动手。** 下面命令里的 `/Users/xxx/moss-live` 是占位符，
 > 请替换成你自己的真实目录（例如 `/Users/你的用户名/python/moss-live`）。
 > 一旦装过 `install_macos_launchd.sh` 或往 `~/.zshrc` 里加过自启钩子，绝对路径就被固化了：
-> 之后重命名或移动目录，会表现为"8000 端口杀不掉、进程反复复活"。
+> 之后重命名或移动目录，会表现为“8000 端口杀不掉、进程反复复活”。
 > 要移动目录，请先卸载自启（`./scripts/install_macos_launchd.sh uninstall`），移动后重新安装。
 > 路径里不要带空格和中文。详见 [docs/DEPLOY.md](docs/DEPLOY.md)。
 
@@ -137,7 +141,7 @@ cd /Users/xxx/moss-live # 换成你刚才 clone 下来的路径
 
 > `install.sh` 只准备运行环境（venv / 依赖 / `.env` / 自检），**不会注册开机自启**，
 > 也不会改动你的 shell 配置。想开机自启要显式执行
-> `./scripts/install_macos_launchd.sh install`，见下文「方式一」。
+> `./scripts/install_macos_launchd.sh install`，见 [§4.2](#42-让它常驻)。
 
 手工版（效果相同，便于理解每一步）：
 
@@ -158,16 +162,67 @@ uvicorn app.main:app --host 127.0.0.1 --port 8000
 #   或：./scripts/run.sh
 ```
 
-> 换一台设备安装（打包装箱、手机访问、HTTPS）：见下方 4.1，完整细节见
-> [docs/DEPLOY.md 第 12 节](docs/DEPLOY.md#12-换一台设备安装迁移)。
-
 打开 <http://127.0.0.1:8000> → 点角色下方的电话按钮 → 允许麦克风 → 说话。
 右上角状态灯应为「服务正常」；显示「缺少密钥」说明 `.env` 里的 Key 没填或没重启。
 
-**到这里已经能用了。** 下面这一段是可选内容：只有希望服务在关掉终端后继续跑、
-或开机自动起来时才需要看，两种方式选一种即可。
+**到这里就能用了，不需要再配置任何东西。** 下面三节都是可选内容，遇到对应需求再看：
 
-**方式一：LaunchAgent（推荐，仅 macOS）** —— 登录即启动、崩溃由系统拉起，完全不用开终端：
+| 你想做的事                               | 去哪节                                  |
+| ---------------------------------------- | --------------------------------------- |
+| 搬到另一台机器 / 用手机访问              | [§4.1](#41-换一台设备安装)              |
+| 关掉终端也继续跑、开机自动起来           | [§4.2](#42-让它常驻)                    |
+| 改过角色人设，想重录开场问候             | [§4.3](#43-重新生成开场问候)            |
+
+### 4.1 换一台设备安装
+
+项目没有硬编码绝对路径，整个目录可以原样搬走；除 `.venv` 外约 2 MB（其中约 1.2 MB 是
+文档截图、1.1 MB 是预生成的开场问候音频——4 个 wav 不需要可以删，前端会自动跳过）。
+
+前提：Python 3.10+（本项目在 3.13 验证）。不需要 Node，不需要 ffmpeg。
+macOS / Linux 已验证；Windows 请用 WSL2 或 Docker。
+
+```bash
+# 旧机器：在项目的父目录打包（下面假设目录名就叫 moss-live）
+cd /Users/xxx
+tar --exclude='moss-live/.venv' \
+    --exclude='moss-live/logs' \
+    --exclude='moss-live/artifacts' \
+    --exclude='moss-live/.git' \
+    --exclude='__pycache__' \
+    -czf moss-live.tar.gz moss-live          # 约 2 MB
+
+# 新机器：解包并安装（install.sh 幂等，可反复执行，从不覆盖已有 .env）
+tar -xzf moss-live.tar.gz && cd moss-live
+./scripts/install.sh --start
+```
+
+包里有 `.env`（含 API Key），传输请走 AirDrop / `scp` / U 盘；换人使用就加
+`--exclude='moss-live/.env'`，到新机器 `install.sh` 会生成空 `.env`，再手动填 key。
+
+接着按需要选：
+
+- 想关掉终端后继续跑 → [§4.2](#42-让它常驻)
+- 想从手机 / 另一台电脑访问 —— 改监听地址、上 HTTPS、设访问口令，
+  三件事缺一不可 → [docs/DEPLOY.md §12.4](docs/DEPLOY.md#124-从别的设备访问手机另一台电脑)
+- 装好之后升级代码 → [docs/DEPLOY.md §12.5](docs/DEPLOY.md#125-更新已有安装)
+
+完整迁移细节（先决条件、`.env` 取舍、证书选型）见
+[docs/DEPLOY.md 第 12 节](docs/DEPLOY.md#12-换一台设备安装迁移)。
+
+### 4.2 让它常驻
+
+`./scripts/run.sh` 是前台运行，`Ctrl+C` 或关掉终端就停。想让它常驻，按平台选一种：
+
+| 平台                     | 做法                                                              |
+| ------------------------ | ----------------------------------------------------------------- |
+| macOS                    | `./scripts/install_macos_launchd.sh install`                      |
+| macOS（无 launchd 权限） | `./scripts/autostart.sh` + 把钩子加进 `~/.zshrc`（见下方方式二）   |
+| Linux                    | `deploy/moss-live.service` → `systemctl enable --now moss-live`   |
+| 任意                     | `docker compose up -d --build`                                    |
+
+macOS 的两种方式展开如下，**装一种就够**：
+
+**方式一：LaunchAgent（推荐）** —— 登录即启动、崩溃由系统拉起，完全不用开终端：
 
 ```bash
 ./scripts/install_macos_launchd.sh install     # 注册 LaunchAgent（只需一次）
@@ -197,72 +252,10 @@ fi
 
 > ⚠️ 方式二的钩子里是**绝对路径**，必须替换成你的真实目录；之后改名、移动项目或换用户名
 > 都要同步修改，否则钩子会静默失败（不报错也不启动）。两种方式可以共存（`autostart.sh`
-> 幂等，检测到在跑就直接返回），但只装一种就够。详见
+> 幂等，检测到在跑就直接返回），但只装一种就够。细节与踩坑记录见
 > [docs/DEPLOY.md §11](docs/DEPLOY.md#11-自启方案与常见坑)。
 
-### 4.1 换一台设备安装
-
-项目没有硬编码绝对路径，整个目录可以原样搬走；除 `.venv` 外约 2 MB（其中 1.1 MB 是
-预生成的开场问候音频，不需要可以删掉，前端会自动跳过）。
-
-**前提**：Python 3.10+（本项目在 3.13 验证）。不需要 Node，不需要 ffmpeg。
-macOS / Linux 已验证；Windows 请用 WSL2 或 Docker。
-
-**第一步：旧机器打包**
-
-在项目的**父目录**下执行（下面假设项目目录就叫 `moss-live`，不一致时改成你自己的目录名）：
-
-```bash
-cd /Users/xxx
-tar --exclude='moss-live/.venv' \
-    --exclude='moss-live/logs' \
-    --exclude='moss-live/artifacts' \
-    --exclude='__pycache__' \
-    -czf moss-live.tar.gz moss-live
-```
-
-包里有 `.env`（含 API Key），传输请走 AirDrop / `scp` / U 盘。
-换人使用就加 `--exclude='moss-live/.env'`，到新机器再填 key。
-
-**第二步：新机器安装**
-
-```bash
-tar -xzf moss-live.tar.gz
-cd moss-live
-./scripts/install.sh              # 查 Python → 建 venv → 装依赖 → 生成 .env → 自检
-./scripts/install.sh --start      # 装完直接启动
-```
-
-`install.sh` 幂等，可反复执行，**从不覆盖已有 `.env`**。
-参数：`--port 9000`、`--python python3.12`、`--no-deps`、`--help`。
-
-**第三步：让它常驻**
-
-| 平台                     | 做法                                                              |
-| ------------------------ | ----------------------------------------------------------------- |
-| macOS                    | `./scripts/install_macos_launchd.sh install`                      |
-| macOS（无 launchd 权限） | `./scripts/autostart.sh` + 把钩子加进 `~/.zshrc`（见 [DEPLOY §11.1](docs/DEPLOY.md#111-终端钩子方案无-launchd-权限时)） |
-| Linux                    | `deploy/moss-live.service` → `systemctl enable --now moss-live`   |
-| 任意                     | `docker compose up -d --build`                                    |
-
-> 注意：`~/.zshrc` 的钩子里写的是本机绝对路径，换设备或换目录要同步改。
-
-**第四步：从手机 / 另一台电脑访问（三件事缺一不可）**
-
-默认只监听 `127.0.0.1`，同网段的其他设备根本连不上。三步依次做完才生效：
-
-1. **改监听地址** —— `.env` 里设 `APP_HOST=0.0.0.0`。
-2. **必须上 HTTPS** —— 浏览器只在安全上下文里给麦克风，`localhost` 豁免。
-   `http://192.168.x.x:8000` 能看界面但拿不到麦克风。有域名可用 Caddy 自动签证书；
-   纯局域网用 `mkcert` 自签并装到设备信任列表；不想碰证书用 Tailscale / Cloudflare Tunnel。
-3. **设访问口令** —— `.env` 里设 `APP_ACCESS_CODE=只有你知道的口令`。
-
-口令别省：监听 `0.0.0.0` 之后，中继会替任何能连上它的人用你的 Key 建会话。
-
-反向代理配置见 `deploy/nginx.conf.example`（WebSocket 的 `Upgrade` 头不能漏），
-证书选型对比、更新流程、排障见 `docs/DEPLOY.md` 第 12 节。
-
-### 4.2 重新生成开场问候
+### 4.3 重新生成开场问候
 
 改了人设名称或语气之后，问候音频要重录，否则接通的自我介绍会和后面的人格不一致。
 
@@ -339,39 +332,7 @@ moss-live/
 
 ---
 
-## 7. 已确认的上游协议事实
-
-以下结论全部通过真实调用验证（脚本见 `scripts/e2e_live.py`、`tests/`）：
-
-1. 连接：`wss://api.mosi.cn/v1/realtime?model=moss-live-1.0&user=<id>`，
-   `Authorization: Bearer <key>` 只能放在握手头里。
-   **查询参数只接受 `model` 与 `user`**，其它参数直接 HTTP 400。
-2. `session.update` 只接受 `persona{name, aliases, prompt}` 与 `instructions`
-   （`tools: []` 会回显但不接受 OpenAI 风格的函数定义）。任何未知字段 →
-   `{"error":{"code":"invalid_public_request"}}` 并以 1008 关闭连接。
-3. 会话顺序：`attach_session` → `session_attached` → `session.update` →
-   `session.updated{error:""}` → `media.mode{tagged-v1}` + `mic_state`。
-4. 音频：上行 16 kHz、下行 48 kHz，单声道 PCM S16LE，无 WAV 头；
-   说完要继续送静音帧。
-5. 媒体封装 `tagged-v1`：音频 `0x00`、摄像头 `0x01`、屏幕 `0x02`；
-   一条 WebSocket 复用全部流。
-6. 下行音频与 `response.audio.context` **严格 1:1 交替**：每个 context 事件后紧跟
-   一个二进制音频帧（实测块大小 4.8 KB ~ 9.6 KB，约 50~100 ms）。
-   **下发速度约 8x 实时**（实测一轮 7.2 s 回答、77 个块，0.89 s 全部送达），
-   所以客户端播放队列必然领先实时数秒，这是正常现象，不能为压延迟而重排。
-7. 打断：用户抢话时服务端先发 `response.audio.stop{reason:"barge-in"}`，
-   再发 `response.interrupted`（带已说出的文本），客户端必须回
-   `playback.stopped{played_audio_ms}`。
-8. 还会出现文档未列的事件：`input.speech.started`、`input.speech.stopped`、
-   `response.audio.started`、`tts_speed_changed`。前端已全部兼容。
-9. 计费按连接在线时长，`session_attached` 开始计费，关闭连接结束。
-10. **不会主动开口**：会话配置完成后只送静音帧，8 秒内没有任何 `response.*` 事件，
-    上游也没有「主动发起一轮」的指令（`response.create` 之类）。想做「接通先打招呼」
-    只能像官网那样预生成问候音频在本地播放，本项目见 [§4.2](#42-重新生成开场问候)。
-
----
-
-## 8. 测试
+## 7. 测试
 
 ```bash
 source .venv/bin/activate
@@ -386,16 +347,16 @@ python scripts/browser_test.py                   # 18 项浏览器端到端检�
 
 ---
 
-## 9. 文档
+## 8. 文档
 
-- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — 开发文档：模块设计、状态机、音频管线、扩展指南
+- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — 开发文档：上游协议事实、模块设计、状态机、音频管线、扩展指南
 - [docs/API.md](docs/API.md) — 后端接口与实时协议
 - [docs/DEPLOY.md](docs/DEPLOY.md) — 部署手册（本机 / launchd / systemd / Docker / Nginx）
 - [docs/TESTING.md](docs/TESTING.md) — 测试报告与截图
 
 ---
 
-## 10. 常见问题
+## 9. 常见问题
 
 **页面右上角显示「缺少密钥」**
 `.env` 里 `MOSS_API_KEY` 为空或未重启服务。`/api/health` 会显示 `api_key_configured`。
@@ -416,7 +377,7 @@ python scripts/browser_test.py                   # 18 项浏览器端到端检�
 
 ---
 
-## 11. 声明
+## 10. 声明
 
 本项目为非官方技术复刻，仅用于学习与演示；MOSS 模型与 API 归上海模思智能科技有限公司所有。
 使用前请遵守其服务条款，注意 API 调用计费。

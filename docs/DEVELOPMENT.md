@@ -1,7 +1,7 @@
 # 开发文档
 
-面向要二次开发、排障或照着复刻的人。阅读前先看 [README](../README.md) 的架构图与
-[§7 协议事实](../README.md#7-已确认的上游协议事实)。
+面向要二次开发、排障或照着复刻的人。阅读前先看 [README](../README.md) 的架构图，
+以及本文档 [§3 上游协议事实](#3-上游协议事实实测)——那是所有后续设计的前提。
 
 ---
 
@@ -42,9 +42,70 @@ uvicorn 进程（单 worker）
 
 ---
 
-## 3. 后端模块
+## 3. 上游协议事实（实测）
 
-### 3.1 `app/config.py`
+以下结论全部由真实调用验证，脚本见 `scripts/e2e_live.py` 与 `tests/`。改协议相关代码之前
+先读这一节——很多“看起来应该支持”的字段，上游会直接断连。
+
+### 3.1 连接与鉴权
+
+- 地址：`wss://api.mosi.cn/v1/realtime?model=moss-live-1.0&user=<id>`。
+- `Authorization: Bearer <key>` **只能**放在握手头里。浏览器原生 WebSocket 无法设置该头，
+  这是必须做中继的第一原因。
+- 查询参数**只接受 `model` 与 `user`**，多带任何参数直接 HTTP 400。
+
+### 3.2 会话配置
+
+- `session.update` 只接受 `persona{name, aliases, prompt}` 与 `instructions`。
+  `tools: []` 会回显，但不接受 OpenAI 风格的函数定义。
+- **任何未知字段** → `{"error":{"code":"invalid_public_request"}}` 并以 1008 关闭连接。
+  所以服务端必须做白名单与字段清洗（`app/protocol.py`）。
+- 会话顺序：`attach_session` → `session_attached` → `session.update` →
+  `session.updated`（`error` 为空）→ `media.mode{tagged-v1}` + `mic_state`。
+- 音色由模型固定，不接受 `voice_id`。传了会被当作未知字段断开。
+
+### 3.3 媒体格式
+
+| 项 | 事实 |
+| --- | --- |
+| 上行音频 | 16 kHz、单声道、PCM S16LE，裸帧无 WAV 头 |
+| 下行音频 | 48 kHz、单声道、PCM S16LE |
+| 封装 | `tagged-v1`：`0x00` 音频 / `0x01` 摄像头 / `0x02` 屏幕，一条 WebSocket 复用全部流 |
+| 静音帧 | 说完要继续送静音帧，不送等于“用户一直沉默” |
+
+### 3.4 下行节奏（最容易踩错）
+
+- 下行音频与 `response.audio.context` **严格 1:1 交替**：每个 context 事件后紧跟一个
+  二进制音频帧（实测块大小 4.8 KB ~ 9.6 KB，约 50~100 ms）。
+- **下发速度约 8x 实时**：实测一轮 7.2 s 回答、77 个块，0.89 s 全部送达。
+- 因此客户端播放队列必然领先实时数秒，这是设计使然。**不要为了压延迟而重排或丢弃音频**，
+  那会破坏 1:1 配对与回执统计。
+
+### 3.5 打断（barge-in）
+
+- 用户抢话时上游先发 `response.audio.stop{reason:"barge-in"}`，紧接着发
+  `response.interrupted`（带已说出的文本）。
+- 客户端必须回 `playback.stopped{played_audio_ms}`，否则上游不知道本地播到了哪里。
+
+### 3.6 文档未列出但会出现的事件
+
+`input.speech.started`、`input.speech.stopped`、`response.audio.started`、
+`tts_speed_changed`。前端已全部兼容。**新增事件不要写成“未知即报错”**，
+上游会加事件但不保证提前公告。
+
+### 3.7 计费与“不会主动开口”
+
+- 计费按连接在线时长：`session_attached` 开始，关闭连接结束。
+- **模型不会主动开口**：会话配置完成后只送静音帧，8 秒内没有任何 `response.*` 事件，
+  上游也没有 `response.create` 之类的“主动发起一轮”指令。想做“接通先打招呼”，
+  只能像官网那样预生成问候音频在本地播放，见
+  [README §4.3](../README.md#43-重新生成开场问候)。
+
+---
+
+## 4. 后端模块
+
+### 4.1 `app/config.py`
 
 `pydantic-settings` 读 `.env` + 环境变量。要点：
 
@@ -52,7 +113,7 @@ uvicorn 进程（单 worker）
 - `masked_api_key` 只返回 `****后四位`，避免把密钥前缀带到前端。
 - `api_key_configured` 供 `/api/health` 与前端状态灯使用。
 
-### 3.2 `app/protocol.py`
+### 4.2 `app/protocol.py`
 
 三个纯函数，全部有单测覆盖：
 
@@ -69,7 +130,7 @@ uvicorn 进程（单 worker）
 > 为什么要这么严：上游收到任何未知字段会立刻
 > `invalid_public_request` + 1008 关闭连接。校验必须发生在转发之前。
 
-### 3.3 `app/personas.py`
+### 4.3 `app/personas.py`
 
 `PERSONAS`（Luna / Leo）与 `SCENARIOS`（自由对话 / 同声传译 / 视觉助手 / 实时助理），
 中英双语文案。场景的 `instructions` 会拼接在角色指令之前：
@@ -81,7 +142,7 @@ instructions = "\n".join([scenario.instructions, persona.instructions])
 新增角色只需往 `PERSONAS` 追加一项（`id/name/tint/tagline/prompt/instructions`），
 前端无需改动。
 
-### 3.4 `app/realtime_proxy.py`
+### 4.4 `app/realtime_proxy.py`
 
 `run_relay(ws, settings, user_id)` 的核心顺序：
 
@@ -103,7 +164,7 @@ accept → 配额检查 → 连接上游（带 Authorization）
 - `stats` 是模块级单例；`reset_stats()` 原地清零（不要重新绑定对象，
   否则 `api.py` 里的引用会指向旧实例）。
 
-### 3.5 `app/api.py` / `app/main.py`
+### 4.5 `app/api.py` / `app/main.py`
 
 - `/api/config` 按 `lang` 返回已翻译的角色与场景，前端切语言时重新拉取。
 - 静态资源加 `Cache-Control: no-store`，避免改前端后浏览器拿旧文件。
@@ -111,7 +172,7 @@ accept → 配额检查 → 连接上游（带 Authorization）
 
 ---
 
-## 4. 前端模块
+## 5. 前端模块
 
 ```
 app.js（控制器）
@@ -123,7 +184,7 @@ app.js（控制器）
 └── media.js           摄像头/屏幕 → JPEG
 ```
 
-### 4.1 状态机
+### 5.1 状态机
 
 ```mermaid
 stateDiagram-v2
@@ -150,7 +211,7 @@ stateDiagram-v2
 timerId / raf / statusKey / muted / camOn / screenOn / focus`。
 `endCall()` 会把 `state.call` 先置空再异步释放资源，避免回调重入。
 
-### 4.2 `session.js`
+### 5.2 `session.js`
 
 职责：连接、握手、事件分发、音频块配对、回执、打断。
 
@@ -179,7 +240,7 @@ case 'response.audio.stop': {
 }
 ```
 
-### 4.3 音频管线
+### 5.3 音频管线
 
 **上行**
 
@@ -206,7 +267,7 @@ ws.onmessage(ArrayBuffer, 48 kHz PCM)
 - `player.stop()` 返回当前块已播毫秒数，供 `playback.stopped` 使用。
 - 排布**严格单调**：新块永远排在已排队音频之后。上游实测以约 8x 实时速度下发
   （7.2 s 回答音频 0.89 s 送完），队列天然领先几秒——这是正常的，AudioContext
-  按时钟精确排布不会漂移。为"压缩延迟"把新块回填到当前时刻会导致多块同时出声、
+  按时钟精确排布不会漂移。为“压缩延迟”把新块回填到当前时刻会导致多块同时出声、
   整段回答被压短（已修复，见 `tests/test_player_queue.py` 的回归用例）。
 
 **本地问候音频（cue）**
@@ -224,7 +285,7 @@ READY → prepareGreeting(fetch /static/audio/greeting-<角色>-<语言>.wav)
 - 被打断时对 cue 的 gain 做线性 ramp 到 0 再 `stop()`，不会「啪」一下断掉。
 - 用户改过人设名字时跳过问候（预录音频里念的是默认名），改语言则换对应语言版本。
 
-### 4.4 视频管线
+### 5.4 视频管线
 
 ```
 camera: getUserMedia({video:1280x720})  → <video> → canvas(长边 640)  → JPEG 0.8 → 0x01
@@ -236,7 +297,7 @@ screen: getDisplayMedia()               → <video> → canvas(长边 1024) → 
   `track.onended` 会同步状态并发同样的指令。
 - 两路同时开启时显示「关注画面」按钮，循环 `auto → camera → screen`。
 
-### 4.5 UI 与可观测
+### 5.5 UI 与可观测
 
 - 光球：`--level` 由麦克风 RMS 与播放分析器取最大值，rAF 平滑后写入 CSS 变量，
   CSS 用 `scale(calc(1 + var(--level) * .085))` 驱动。
@@ -246,7 +307,7 @@ screen: getDisplayMedia()               → <video> → canvas(长边 1024) → 
 
 ---
 
-## 5. 时序：一次带打断的通话
+## 6. 时序：一次带打断的通话
 
 ```mermaid
 sequenceDiagram
@@ -297,7 +358,7 @@ sequenceDiagram
 
 ---
 
-## 6. 事件到 UI 的映射
+## 7. 事件到 UI 的映射
 
 | 事件 | UI 行为 |
 | --- | --- |
@@ -317,7 +378,7 @@ sequenceDiagram
 
 ---
 
-## 7. 扩展指南
+## 8. 扩展指南
 
 **加一个角色**：在 `personas.py` 的 `PERSONAS` 里追加字典，`tint` 取 `warm|cool`。
 前端自动渲染，无需改 HTML/JS。
@@ -337,7 +398,7 @@ sequenceDiagram
 
 ---
 
-## 8. 代码约定
+## 9. 代码约定
 
 1. 前端只用 ESM，不引入打包器；新增模块记得在 `app.js` 里 import。
 2. i18n 的 key 以 `区块.名称` 命名，新增文案必须同时补 `zh` 与 `en`。
@@ -348,7 +409,7 @@ sequenceDiagram
 
 ---
 
-## 9. 已知限制
+## 10. 已知限制
 
 - 音色固定（上游限制），无法为两个角色配置不同声线。
 - 上游不支持中途修改人设；修改需重新建立会话。
